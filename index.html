@@ -1,0 +1,1134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#141c27">
+<meta name="description" content="Learn the Associate Operations Analyst job by working a night shift in a 3D ops center.">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Night Shift">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<title>Night Shift Ops</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: full-screen 3D world; HUD pinned to corners inside safe areas; dialog as bottom panel */
+:root{
+  --bg:#141c27; --panel:rgba(16,23,33,.92); --line:#33445a; --fg:#e6edf3; --muted:#93a4b5;
+  --accent:#ffd34d; --accent-ink:#231a00; --ok:#45c983; --warn:#f0c84b; --bad:#f06060; --term:#7cc4ff;
+  --f-display:"Chakra Petch",ui-sans-serif,system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--fg)}
+body{font-family:var(--f-body);font-size:15px;line-height:1.45;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;touch-action:none}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#game{position:fixed;inset:0}
+#game canvas{display:block;width:100%;height:100%}
+.hud{position:fixed;z-index:3;pointer-events:none}
+.hud > *,#act,#joy{pointer-events:auto}
+#objWrap{top:calc(10px + env(safe-area-inset-top,0px));left:max(12px,env(safe-area-inset-left,0px));right:150px;max-width:420px}
+.obj{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:8px 12px}
+.obj small{display:block;font-family:var(--f-mono);font-size:10px;letter-spacing:.14em;color:var(--accent)}
+.obj span{font-size:14px;font-weight:500}
+#topRight{top:calc(10px + env(safe-area-inset-top,0px));right:max(12px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.nbBtn{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-family:var(--f-display);font-weight:600;font-size:14px;letter-spacing:.04em}
+.saveBtn{border-color:var(--accent);color:var(--accent)}
+.saveBtn.done{background:var(--accent);color:var(--accent-ink)}
+.nbBtn b{color:var(--accent);margin-left:4px}
+.clock{font-family:var(--f-mono);font-size:12px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:3px 8px}
+#joy{left:max(18px,env(safe-area-inset-left,0px));bottom:calc(22px + env(safe-area-inset-bottom,0px));width:128px;height:128px;border-radius:50%;background:rgba(20,30,44,.55);border:2px solid rgba(255,255,255,.18);touch-action:none}
+#knob{position:absolute;left:39px;top:39px;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.35);border:2px solid rgba(255,255,255,.6);pointer-events:none}
+#act{right:max(18px,env(safe-area-inset-right,0px));bottom:calc(36px + env(safe-area-inset-bottom,0px));background:var(--accent);color:var(--accent-ink);border:0;border-radius:40px;padding:16px 22px;font-family:var(--f-display);font-weight:700;font-size:17px;letter-spacing:.03em;box-shadow:0 4px 0 #a8861c,0 8px 20px rgba(0,0,0,.35)}
+#act:active{transform:translateY(2px);box-shadow:0 2px 0 #a8861c}
+#act kbd{font-family:var(--f-mono);font-size:12px;background:rgba(0,0,0,.15);border-radius:4px;padding:1px 6px;margin-right:8px}
+.keys{left:50%;transform:translateX(-50%);bottom:calc(12px + env(safe-area-inset-bottom,0px));font-size:12px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:4px 10px;white-space:nowrap}
+#toast{top:calc(70px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--term);color:var(--fg);border-radius:20px;padding:6px 14px;font-size:13px;white-space:nowrap;transition:opacity .3s}
+#toast b{color:var(--term)}
+/* dialog */
+#dlg{left:0;right:0;bottom:0;display:flex;justify-content:center;padding:0 max(10px,env(safe-area-inset-right,0px)) calc(10px + env(safe-area-inset-bottom,0px)) max(10px,env(safe-area-inset-left,0px))}
+.dbox{touch-action:pan-y;width:100%;max-width:680px;max-height:62vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-top:3px solid var(--accent);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;cursor:pointer;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+.who{font-family:var(--f-display);font-weight:700;font-size:16px;color:var(--accent);letter-spacing:.03em}
+.txt{font-size:15.5px;max-width:62ch}
+.txt pre,.mono{font-family:var(--f-mono);font-size:12.5px;background:#0b1118;border:1px solid var(--line);border-radius:6px;padding:8px 10px;margin:6px 0;white-space:pre;overflow-x:auto;display:block}
+.term{color:var(--term);font-weight:600;border-bottom:1px dotted var(--term)}
+.g{color:var(--ok)} .y{color:var(--warn)} .r{color:var(--bad)}
+.choices{display:flex;flex-direction:column;gap:7px}
+.ch{text-align:left;background:#1d2a3a;border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:14.5px}
+.ch:hover:not(:disabled){border-color:var(--accent)}
+.ch:disabled{opacity:.45;cursor:default;text-decoration:line-through}
+.fb{font-size:14px;border-left:3px solid var(--bad);padding-left:10px;color:#ffc9c9}
+.fb.ok{border-color:var(--ok);color:#c9f5dc}
+.nexthint{font-family:var(--f-mono);font-size:11px;color:var(--muted);text-align:right;letter-spacing:.08em}
+/* overlays */
+.overlay{position:fixed;inset:0;z-index:10;background:rgba(8,12,18,.86);display:flex;align-items:center;justify-content:center;padding:calc(20px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(20px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.card{touch-action:pan-y;width:100%;max-width:520px;max-height:100%;overflow:auto;background:#162131;border:1px solid var(--line);border-radius:14px;padding:22px;display:flex;flex-direction:column;gap:12px}
+.card h1{font-family:var(--f-display);font-size:34px;line-height:1.05;margin:0;text-wrap:balance}
+.card h2{font-family:var(--f-display);font-size:22px;margin:0}
+.eyebrow{font-family:var(--f-mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
+.card p{margin:0;color:var(--muted)}
+.btn{background:var(--accent);color:var(--accent-ink);border:0;border-radius:10px;padding:14px 20px;font-family:var(--f-display);font-weight:700;font-size:17px;letter-spacing:.04em}
+.btn.ghost{background:none;color:var(--fg);border:1px solid var(--line)}
+.ctrl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13px;color:var(--muted)}
+.ctrl b{color:var(--fg);font-family:var(--f-mono);font-weight:500}
+.terms{display:flex;flex-direction:column;gap:10px}
+.terms div{border-bottom:1px solid var(--line);padding-bottom:9px}
+.terms dt{font-weight:600;color:var(--term)}
+.terms dd{margin:2px 0 0;font-size:14px;color:var(--muted)}
+.empty{color:var(--muted);font-size:14px}
+.incl{font-size:13px;line-height:1.3;padding:3px 0}
+.incl+.incl{border-top:1px solid var(--line);margin-top:3px;padding-top:5px}
+.incl b{font-family:var(--f-mono);font-weight:500;margin-right:4px}
+.incl span{color:var(--muted);font-size:12px}
+.stars{font-size:38px;letter-spacing:6px;color:#3a4a5e;line-height:1}
+.stars .on{color:var(--accent)}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.stats div{background:#1d2a3a;border:1px solid var(--line);border-radius:8px;padding:8px;font-size:11px;color:var(--muted);text-align:center;text-transform:uppercase;letter-spacing:.06em}
+.stats b{display:block;font-family:var(--f-display);font-size:22px;color:var(--fg);letter-spacing:0;text-transform:none}
+.rankup{border:1px solid var(--accent);background:rgba(255,211,77,.08);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:4px;font-size:14px;color:var(--muted)}
+.rankup b{font-family:var(--f-display);font-size:20px;color:var(--accent)}
+.rankup.fail{border-color:var(--line);background:none}
+#rpLessons{display:flex;flex-direction:column;gap:6px}
+#rpLessons p{font-size:14px;border-left:3px solid var(--warn);padding-left:10px}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.row .btn{flex:1}
+@media (hover:hover) and (pointer:fine){#joy{display:none}}
+@media (hover:none),(pointer:coarse){.keys{display:none}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div id="game"></div>
+
+<div class="hud" id="objWrap"><div class="obj"><small id="objHead">OBJECTIVE</small><span id="obj">Press Start</span></div></div>
+<div class="hud" id="topRight">
+  <button class="nbBtn" id="nbBtn">Notebook<b id="nbCount">0</b></button>
+  <button class="nbBtn saveBtn" id="saveBtn" hidden>Save</button>
+  <div class="clock" id="clock">01:30 AM</div>
+</div>
+<div class="hud" id="joy"><div id="knob"></div></div>
+<button class="hud" id="act" hidden><kbd>E</kbd><span id="actTxt">Talk</span></button>
+<div class="hud keys" id="keysHint">WASD or arrows to move · E to interact</div>
+<div class="hud" id="toast" style="opacity:0"></div>
+<div class="hud" id="dlg" hidden><div class="dbox" id="dbox"><div class="who" id="dWho"></div><div class="txt" id="dTxt"></div><div class="choices" id="dCh"></div><div id="dFb"></div><div class="nexthint" id="dNext">TAP TO CONTINUE ▸</div></div></div>
+
+<div class="overlay" id="title">
+  <div class="card">
+    <div class="eyebrow">Dental insurance · Operations Center</div>
+    <h1>Night Shift Ops</h1>
+    <p>It's your first night as an Associate Operations Analyst. You don't need to know anything yet. Rosa, the shift lead, will walk you through a real shift, and you'll learn the job by doing it.</p>
+    <div class="ctrl">
+      <b>Move</b><span>WASD / arrow keys, or the joystick on a phone</span>
+      <b>Interact</b><span>E or Space, or the yellow button</span>
+      <b>Follow</b><span>the floating yellow marker</span>
+      <b>Review</b><span>new words land in your Notebook</span>
+    </div>
+    <p id="menuInfo" hidden></p>
+    <p id="saveInfo" hidden></p>
+    <button class="btn" id="shiftContBtn" hidden>Continue shift</button>
+    <button class="btn" id="shiftBtn" hidden>Start shift</button>
+    <button class="btn" id="contBtn" hidden>Continue shift</button>
+    <button class="btn" id="startBtn">Clock in</button>
+    <p style="font-size:12px">Progress saves automatically on this device.</p>
+  </div>
+</div>
+
+<div class="overlay" id="nb" hidden>
+  <div class="card">
+    <div class="eyebrow">Your Notebook</div>
+    <h2>Words you've learned</h2>
+    <dl class="terms" id="nbList"></dl>
+    <button class="btn ghost" id="nbClose">Back to work</button>
+  </div>
+</div>
+
+<div class="overlay" id="end" hidden>
+  <div class="card">
+    <div class="eyebrow">Shift complete · 06:00 AM</div>
+    <h1>You ran the night shift.</h1>
+    <p id="endTxt"></p>
+    <dl class="terms" id="endList"></dl>
+    <div class="row"><button class="btn" id="againBtn">Start your first real shift</button><button class="btn ghost" id="endMenuBtn">Menu</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="report" hidden>
+  <div class="card">
+    <div class="eyebrow" id="rpEyebrow"></div>
+    <h1 id="rpTitle"></h1>
+    <div class="stars" id="rpStars"></div>
+    <div class="stats" id="rpStats"></div>
+    <div id="rpRank"></div>
+    <div id="rpLessons"></div>
+    <div class="row"><button class="btn" id="rpNext">Next shift</button><button class="btn ghost" id="rpMenu">Menu</button></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+const $=s=>document.querySelector(s);
+
+/* ================= TERMS ================= */
+const TERMS={
+ job:['Job','A program that runs by itself to do one piece of work, like loading today\'s claims.'],
+ batch:['Batch processing','Running lots of jobs automatically, usually overnight, without anyone clicking buttons.'],
+ tidal:['Tidal','The scheduling software that starts each job at the right time and records what happened.'],
+ dashboard:['Dashboard','A screen showing the status of every job and server. Green is OK; anything else gets reported.'],
+ sla:['SLA','Service Level Agreement: the deadline a job has to finish by.'],
+ server:['Server','A computer in the data center that runs jobs and programs.'],
+ threshold:['Threshold','A limit, like CPU at 85%. Crossing it sets off an alert.'],
+ alert:['Alert','An automatic warning that something crossed a threshold or failed.'],
+ infrastructure:['Infrastructure team','The team that owns servers, storage and networks.'],
+ triage:['Triage call','A quick call that gets the right teams on the line to fix a problem fast.'],
+ vendor:['Vendor','An outside company the business works with, like the one that sends claim files.'],
+ dependency:['Dependency','Something a job must wait for before it can start: another job, a file, or a time.'],
+ step:['Step','One stage inside a job. Steps run in order: STEP010, STEP020, STEP030.'],
+ eoj:['EOJ','End of Job. The job finished successfully.'],
+ abend:['Abend','Abnormal end: the job crashed. It comes with a code that hints at why.'],
+ s0c7:['S0C7','An abend code meaning bad data, like a letter where a number should be. Rerunning won\'t fix it.'],
+ log:['Log','A job\'s diary: each step it ran and any errors, line by line.'],
+ appdev:['App Dev','Application Development: the programmers who write and fix the jobs.'],
+ escalate:['Escalate','Hand a problem to the team that can fix it, with the details they need.'],
+ restart:['Restart','Rerunning a job from the step that failed, after the cause is fixed.'],
+ reconcile:['Reconcile','Compare two systems that should match and flag any differences.'],
+ turnover:['Turnover','The handoff note for the next shift: what failed, what you did, what\'s still open.'],
+ requester:['Requester','The person or team waiting on a job. You tell them when it finishes or if it\'s late.'],
+ change:['Change','A planned update to production code or settings, tracked with a CHG number. New abends often follow a change.'],
+ sb37:['SB37','An abend code meaning the job ran out of space writing its output. Storage (Infrastructure) fixes it.'],
+ s806:['S806','An abend code meaning the program could not be found, often because a change wasn\'t deployed right. App Dev fixes it.'],
+ s222:['S222','An abend code meaning someone cancelled the job. Check the turnover notes before doing anything.'],
+ s322:['S322','An abend code meaning the job ran past its CPU time limit, often a loop or far more data than usual.']
+};
+const learned=[];
+function learn(k){
+  if(learned.includes(k))return;
+  learned.push(k);$('#nbCount').textContent=learned.length;
+  toast('New word: <b>'+TERMS[k][0]+'</b> · saved to Notebook');saveCareer();
+}
+function termList(el){
+  el.innerHTML=learned.length?learned.map(k=>`<div><dt>${TERMS[k][0]}</dt><dd>${TERMS[k][1]}</dd></div>`).join(''):'<p class="empty">Nothing yet. Talk to Rosa to get started.</p>';
+}
+let toastT=null;
+function toast(h){const t=$('#toast');t.innerHTML=h;t.style.opacity=1;clearTimeout(toastT);toastT=setTimeout(()=>t.style.opacity=0,2600)}
+
+/* ================= THREE SETUP ================= */
+const wrap=$('#game');
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+wrap.appendChild(renderer.domElement);
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x141c27);
+scene.fog=new THREE.Fog(0x141c27,38,75);
+const camera=new THREE.PerspectiveCamera(50,1,0.1,200);
+const camOff=new THREE.Vector3(0,13,12);
+function resize(){
+  const w=wrap.clientWidth,h=wrap.clientHeight;
+  renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();
+  if(h>w)camOff.set(0,17,14);else camOff.set(0,13,12);
+}
+window.addEventListener('resize',resize);resize();
+
+scene.add(new THREE.HemisphereLight(0xdfe9ff,0x2b3442,0.95));
+const sun=new THREE.DirectionalLight(0xffffff,0.6);sun.position.set(8,20,12);scene.add(sun);
+
+const mats={};
+const mat=c=>mats[c]||(mats[c]=new THREE.MeshLambertMaterial({color:c}));
+const solids=[];
+function box(w,h,d,c,x,y,z,solid){
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),typeof c==='number'?mat(c):c);
+  m.position.set(x,y,z);scene.add(m);
+  if(solid)solids.push({x0:x-w/2,x1:x+w/2,z0:z-d/2,z1:z+d/2});
+  return m;
+}
+function canvasTex(w,h,draw){const c=document.createElement('canvas');c.width=w;c.height=h;const g=c.getContext('2d');draw(g,w,h);const t=new THREE.CanvasTexture(c);t.anisotropy=4;return {tex:t,canvas:c,g}}
+function label(text,opt){
+  opt=opt||{};const fs=opt.fs||44,pad=18;
+  const meas=document.createElement('canvas').getContext('2d');meas.font=`700 ${fs}px "Chakra Petch", sans-serif`;
+  const w=Math.ceil(meas.measureText(text).width)+pad*2,h=fs+pad*1.3;
+  const {tex}=canvasTex(w,h,(g)=>{g.fillStyle=opt.bg||'rgba(12,18,27,.82)';
+    const r=h/2;g.beginPath();g.moveTo(r,0);g.lineTo(w-r,0);g.arc(w-r,r,r,-Math.PI/2,Math.PI/2);g.lineTo(r,h);g.arc(r,r,r,Math.PI/2,Math.PI*1.5);g.fill();
+    g.font=`700 ${fs}px "Chakra Petch", sans-serif`;g.fillStyle=opt.fg||'#ffffff';g.textBaseline='middle';g.fillText(text,pad,h/2+2)});
+  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,depthTest:false,transparent:true}));
+  const sc=(opt.scale||0.011);s.scale.set(w*sc,h*sc,1);s.renderOrder=5;return s;
+}
+function floorText(text,x,z,size,color){
+  const {tex}=canvasTex(1024,160,(g,w,h)=>{g.font='700 110px "Chakra Petch", sans-serif';g.fillStyle=color||'rgba(255,255,255,.16)';g.textAlign='center';g.textBaseline='middle';g.fillText(text,w/2,h/2)});
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(size,size*160/1024),new THREE.MeshBasicMaterial({map:tex,transparent:true,depthWrite:false}));
+  m.rotation.x=-Math.PI/2;m.position.set(x,0.03,z);scene.add(m);
+}
+
+/* ================= WORLD ================= */
+const floor=new THREE.Mesh(new THREE.PlaneGeometry(56,40),mat(0x334052));floor.rotation.x=-Math.PI/2;scene.add(floor);
+const grid=new THREE.GridHelper(40,20,0x405066,0x405066);grid.scale.x=56/40;grid.position.y=0.01;scene.add(grid);
+function zone(x,z,w,d,c){const m=new THREE.Mesh(new THREE.PlaneGeometry(w,d),new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:.35,depthWrite:false}));m.rotation.x=-Math.PI/2;m.position.set(x,0.02,z);scene.add(m)}
+zone(0,8,12,9,0x3a6b8a); zone(-19,-11,18,18,0x2c3f5a); zone(23,8,9,12,0x6b5a2c); zone(11,-6,20,8,0x3d5a46); zone(18,-15,9,8,0x5a3d6b); zone(-14,10,9,8,0x5a4a3d);
+floorText('OPS DESK',0,11.2,9); floorText('SERVER ROOM',-19,-3.6,12); floorText('LOADING DOCK',23,13,8); floorText('BATCH LINE',11,-2.6,10); floorText('APP DEV',18,-11.6,7); floorText('RECONCILIATION',-14,13.4,8);
+
+const WALL=0x55657b;
+box(56.5,3,0.5,WALL,0,1.5,-20,true); box(56.5,1.2,0.5,WALL,0,0.6,20,true);
+box(0.5,3,40,WALL,-28,1.5,0,true); box(0.5,3,40,WALL,28,1.5,0,true);
+box(0.5,3,9,WALL,-10,1.5,-15.5,true); box(14,3,0.5,WALL,-21,1.5,-2,true);
+// dock door
+box(0.2,3.4,5,0x8a96a6,27.7,1.7,8); for(let i=0;i<6;i++)box(0.25,0.08,5,0x6c7888,27.65,0.4+i*0.55,8);
+box(0.12,0.02,6,0xffd34d,25.6,0.04,8); box(4,0.02,0.12,0xffd34d,25.6,0.04,5); box(4,0.02,0.12,0xffd34d,25.6,0.04,11);
+// plants for life
+function plant(x,z){box(0.7,0.7,0.7,0x8b5e3c,x,0.35,z,true);const l=new THREE.Mesh(new THREE.IcosahedronGeometry(0.75,0),mat(0x3f9a5a));l.position.set(x,1.3,z);scene.add(l)}
+plant(-6,18);plant(6,18);plant(-26,18);plant(26,-18);plant(-8,-18);
+
+// ops desk
+box(6,1,1.5,0x7a5c43,0,0.5,6,true);
+box(1.2,0.8,0.1,0x111821,-1.6,1.4,5.6); box(1.2,0.8,0.1,0x111821,0,1.4,5.6);
+const phone=box(0.55,0.25,0.38,0xd8352a,2.4,1.13,6); const phoneLbl=label('PHONE',{fs:36});phoneLbl.position.set(2.4,1.9,6);scene.add(phoneLbl);
+
+// dashboard wall
+box(15,5.8,0.3,0x0b1016,2,3.1,-19.6);
+const dash=canvasTex(1024,380,()=>{});
+const dashScreen=new THREE.Mesh(new THREE.PlaneGeometry(14,5.2),new THREE.MeshBasicMaterial({map:dash.tex}));dashScreen.position.set(2,3.1,-19.42);scene.add(dashScreen);
+const TILES=[['CLAIMS_EXTRACT','idle','SCHEDULED'],['CLAIMS_VALIDATE','idle','SCHEDULED'],['CLAIMS_LOAD','idle','SCHEDULED'],['PAY_CALC','idle','SCHEDULED'],['BILL_CYCLE','ok','SLA 02:00'],['BATCHAPP02','ok','OK'],['BATCHAPP03','ok','OK'],['GL_POST','ok','EOJ']];
+const COL={ok:'#2f9e64',warn:'#c99a1c',bad:'#c93c3c',idle:'#4a5666',run:'#2f72c9'};
+function drawDash(){
+  const g=dash.g;g.fillStyle='#0b1118';g.fillRect(0,0,1024,380);
+  g.fillStyle='#9fb0c2';g.font='600 26px "IBM Plex Mono", monospace';g.fillText('BATCH DASHBOARD',24,40);
+  g.textAlign='right';g.fillText(clockStr(),1000,40);g.textAlign='left';
+  TILES.forEach((t,i)=>{const cx=24+(i%4)*248,cy=64+Math.floor(i/4)*154;
+    g.fillStyle=COL[t[1]];g.fillRect(cx,cy,232,140);
+    g.fillStyle='rgba(0,0,0,.25)';g.fillRect(cx,cy+92,232,48);
+    g.fillStyle='#fff';g.font='600 22px "IBM Plex Mono", monospace';g.fillText(t[0],cx+12,cy+36);
+    g.font='700 26px "Chakra Petch", sans-serif';g.fillText(t[2],cx+12,cy+126)});
+  dash.tex.needsUpdate=true;
+}
+function setTile(n,s,txt){const t=TILES.find(x=>x[0]===n);t[1]=s;t[2]=txt;drawDash()}
+const dashLbl=label('DASHBOARD',{fs:40});dashLbl.position.set(2,6.5,-19.3);scene.add(dashLbl);
+
+// turnover board
+box(4.2,2.8,0.2,0x2a3646,-13,2,-19.7);
+const tob=canvasTex(512,340,()=>{});
+const tobScreen=new THREE.Mesh(new THREE.PlaneGeometry(3.9,2.55),new THREE.MeshBasicMaterial({map:tob.tex}));tobScreen.position.set(-13,2,-19.58);scene.add(tobScreen);
+let turnoverDone=false;
+function drawTurnover(done){turnoverDone=done;const g=tob.g;g.fillStyle='#e9eef2';g.fillRect(0,0,512,340);g.fillStyle='#1d2733';g.font='700 34px "Chakra Petch", sans-serif';g.fillText('SHIFT TURNOVER',24,48);
+  g.font='22px "IBM Plex Mono", monospace';g.fillStyle='#3a4757';
+  const lines=done?['BATCHAPP02 CPU high -> Infra','  moved load to APP03. OK','Vendor file late -> resent','CLAIMS_LOAD S0C7 -> App Dev','  fixed C2207, restarted. EOJ','OPEN: C1002 paid != billed']:['(blank)'];
+  lines.forEach((l,i)=>g.fillText(l,24,96+i*38));tob.tex.needsUpdate=true}
+drawTurnover(false);
+const tobLbl=label('TURNOVER',{fs:36});tobLbl.position.set(-13,3.9,-19.4);scene.add(tobLbl);
+
+// server room racks
+const racks=[];let redRack=null;
+[-12.5,-7].forEach(z=>{[-25,-23.4,-21.8,-20.2,-18.6,-17].forEach(x=>{
+  const r=box(1.3,2.5,1,0x1e252e,x,1.25,z,true);
+  const leds=[];for(let i=0;i<4;i++){const l=new THREE.Mesh(new THREE.PlaneGeometry(0.9,0.08),new THREE.MeshBasicMaterial({color:0x3bd47a}));l.position.set(x,0.6+i*0.5,z+0.51);scene.add(l);leds.push(l)}
+  racks.push({r,leds,x,z});if(x===-17&&z===-7)redRack={r,leds,x,z};
+})});
+const rackLbl=label('BATCHAPP02',{fs:34});rackLbl.position.set(-17,3.2,-7);scene.add(rackLbl);
+let rackAlarm=false;
+function setRack(on){rackAlarm=on;redRack.leds.forEach(l=>l.material.color.set(on?0xf04848:0x3bd47a))}
+
+// recon desk
+box(3,1,1.4,0x7a5c43,-14,0.5,10,true);
+box(0.9,0.15,0.7,0x3a7bd5,-14.7,1.08,10); box(0.9,0.15,0.7,0xd5873a,-13.3,1.08,10);
+const l1=label('PAYMENTS',{fs:30});l1.position.set(-14.7,1.7,10);scene.add(l1);
+const l2=label('BILLING',{fs:30});l2.position.set(-13.3,1.7,10);scene.add(l2);
+
+// pallet
+box(2.2,0.25,2.2,0x9c7a4a,24,0.13,8,false);
+
+// batch line
+box(14,0.8,1.4,0x272c33,11,0.4,-6,true);
+box(14,0.04,1.1,0x3d434c,11,0.82,-6);
+const stationLights=[];
+[['STEP010',8],['STEP020',12],['STEP030',16]].forEach(([n,x])=>{
+  box(0.25,2.4,0.25,0x8794a6,x,1.2,-6.8);box(0.25,2.4,0.25,0x8794a6,x,1.2,-5.2);box(0.3,0.3,1.9,0x8794a6,x,2.45,-6);
+  const s=new THREE.Mesh(new THREE.SphereGeometry(0.18,10,8),new THREE.MeshBasicMaterial({color:0x45c983}));s.position.set(x,2.75,-6);scene.add(s);stationLights.push(s);
+  const lb=label(n,{fs:32});lb.position.set(x,3.3,-6);scene.add(lb)});
+box(0.6,0.05,1.1,0xffd34d,4.3,0.85,-6);
+const startLbl=label('LOAD HERE',{fs:30,bg:'rgba(255,211,77,.9)',fg:'#231a00'});startLbl.position.set(3.4,1.8,-6);scene.add(startLbl);
+
+// job shelf
+box(3.4,0.12,0.9,0x6b7787,1,1.0,-10.7,true);box(3.4,0.12,0.9,0x6b7787,1,0.2,-10.7);
+[-0.6,2.6].forEach(x=>box(0.12,1.1,0.9,0x6b7787,x,0.55,-10.7));
+const shelfLbl=label('JOB SHELF',{fs:34});shelfLbl.position.set(1,2.6,-10.7);scene.add(shelfLbl);
+function makeCrate(color,text,needs){
+  const g=new THREE.Group();const b=new THREE.Mesh(new THREE.BoxGeometry(0.75,0.75,0.75),mat(color));g.add(b);
+  const strip=new THREE.Mesh(new THREE.BoxGeometry(0.77,0.12,0.77),mat(0x222222));g.add(strip);
+  if(text){const l=label(text,{fs:28,scale:0.009});l.position.y=0.8;g.add(l);g.userData.lbl=l}
+  g.userData.box=b;scene.add(g);return g;
+}
+const JOBS=[
+ {name:'CLAIMS_EXTRACT',color:0x4f9be0,needs:[]},
+ {name:'CLAIMS_VALIDATE',color:0x9b6fe0,needs:['CLAIMS_EXTRACT']},
+ {name:'CLAIMS_LOAD',color:0xe0a24f,needs:['CLAIMS_VALIDATE','vendor file (arrived)']}
+];
+JOBS.forEach((j,i)=>{j.crate=makeCrate(j.color,j.name.replace('CLAIMS_',''));j.home=new THREE.Vector3(0+i*1.05,1.45,-10.7);j.crate.position.copy(j.home)});
+
+// app dev desk
+box(3,1,1.2,0x4a4f5c,18,0.5,-14,true);box(1.2,0.8,0.1,0x111821,18,1.4,-14.4);
+
+/* ================= CHARACTERS ================= */
+function makeChar(c){
+  const g=new THREE.Group();
+  const limb=(w,h,d,col,x,y)=>{const p=new THREE.Group();p.position.set(x,y,0);const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(col));m.position.y=-h/2;p.add(m);g.add(p);return p};
+  const legL=limb(0.46,0.9,0.46,c.pants,-0.25,0.9),legR=limb(0.46,0.9,0.46,c.pants,0.25,0.9);
+  const torso=new THREE.Mesh(new THREE.BoxGeometry(1,1,0.5),mat(c.shirt));torso.position.y=1.4;g.add(torso);
+  const armL=limb(0.4,0.95,0.4,c.shirt,-0.72,1.88),armR=limb(0.4,0.95,0.4,c.shirt,0.72,1.88);
+  [armL,armR].forEach(a=>{const h=new THREE.Mesh(new THREE.BoxGeometry(0.38,0.2,0.38),mat(c.skin));h.position.y=-1.0;a.add(h)});
+  const head=new THREE.Mesh(new THREE.BoxGeometry(0.8,0.8,0.8),mat(c.skin));head.position.y=2.3;g.add(head);
+  const hair=new THREE.Mesh(new THREE.BoxGeometry(0.84,0.22,0.84),mat(c.hair));hair.position.y=2.72;g.add(hair);
+  [-0.17,0.17].forEach(x=>{const e=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.13,0.02),mat(0x1a1a1a));e.position.set(x,2.36,0.41);g.add(e)});
+  const smile=new THREE.Mesh(new THREE.BoxGeometry(0.26,0.05,0.02),mat(0x1a1a1a));smile.position.set(0,2.14,0.41);g.add(smile);
+  const sh=new THREE.Mesh(new THREE.CircleGeometry(0.7,20),new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:.28,depthWrite:false}));sh.rotation.x=-Math.PI/2;sh.position.y=0.02;g.add(sh);
+  g.userData={legL,legR,armL,armR,phase:0};scene.add(g);return g;
+}
+function animChar(ch,moving,dt){
+  const u=ch.userData;u.phase+=dt*(moving?10:0);const s=moving?Math.sin(u.phase)*0.7:0;
+  const k=moving?1:Math.min(1,dt*10);
+  u.legL.rotation.x+= (s-u.legL.rotation.x)*k; u.legR.rotation.x+=(-s-u.legR.rotation.x)*k;
+  if(!u.carrying){u.armL.rotation.x+=(-s-u.armL.rotation.x)*k;u.armR.rotation.x+=(s-u.armR.rotation.x)*k}
+}
+const player=makeChar({shirt:0xe2533a,pants:0x2c4a7a,skin:0xf1c27d,hair:0x5a3a1e});
+player.position.set(0,0,15);player.rotation.y=Math.PI;
+const rosa=makeChar({shirt:0x2fa39a,pants:0x2b3242,skin:0xc68a5e,hair:0x2b1a12});rosa.position.set(0,0,4.7);
+const rl=label('Rosa · Shift Lead',{fs:34});rl.position.y=3.35;rosa.add(rl);
+const marcus=makeChar({shirt:0x6c5ce7,pants:0x30343f,skin:0x8d5a3b,hair:0x111111});marcus.position.set(18,0,-15.3);
+const ml=label('Marcus · App Dev',{fs:34});ml.position.y=3.35;marcus.add(ml);
+
+/* ================= DYNAMIC OBJECTS ================= */
+const fileCrate=makeCrate(0x7fbf5a,'CLAIMS FILE');fileCrate.visible=false;
+const scroll=new THREE.Group();{const s=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.16,0.9,12),mat(0xf3e7c4));s.rotation.z=Math.PI/2;scroll.add(s);const l=label('LOG',{fs:30,bg:'rgba(240,96,96,.9)'});l.position.y=0.6;scroll.add(l);scroll.visible=false;scene.add(scroll)}
+let carried=null;
+function carry(obj){carried=obj;obj.visible=true;player.userData.carrying=true;player.userData.armR.rotation.x=-Math.PI*0.9;player.userData.armL.rotation.x=-Math.PI*0.9}
+function dropCarry(){const c=carried;carried=null;player.userData.carrying=false;player.userData.armL.rotation.x=0;player.userData.armR.rotation.x=0;return c}
+const tweens=[];
+function tween(obj,to,dur,done){tweens.push({obj,from:obj.position.clone(),to,t:0,dur,done})}
+const belt=[];
+function sendDown(crate,target,onArrive){crate.position.set(4.6,1.25,-6);belt.push({crate,target,onArrive,done:false})}
+const smoke=[];
+function puff(x){for(let i=0;i<3;i++){const p=new THREE.Mesh(new THREE.BoxGeometry(0.25,0.25,0.25),new THREE.MeshBasicMaterial({color:0xe05050,transparent:true,opacity:.8}));p.position.set(x+(Math.random()-.5)*.6,1.6,-6+(Math.random()-.5)*.6);scene.add(p);smoke.push({p,life:1.4})}}
+let smoking=false;
+
+/* beacon + arrow */
+const beacon=new THREE.Mesh(new THREE.OctahedronGeometry(0.45),new THREE.MeshBasicMaterial({color:0xffd34d}));scene.add(beacon);
+const ring=new THREE.Mesh(new THREE.RingGeometry(1.1,1.35,36),new THREE.MeshBasicMaterial({color:0xffd34d,transparent:true,opacity:.75,side:THREE.DoubleSide,depthWrite:false}));ring.rotation.x=-Math.PI/2;scene.add(ring);
+beacon.visible=false;ring.visible=false;
+const beacons=[0,1,2,3].map(()=>{const b=new THREE.Mesh(beacon.geometry,new THREE.MeshBasicMaterial({color:0xffd34d}));const r=new THREE.Mesh(ring.geometry,new THREE.MeshBasicMaterial({color:0xffd34d,transparent:true,opacity:.75,side:THREE.DoubleSide,depthWrite:false}));r.rotation.x=-Math.PI/2;b.visible=r.visible=false;scene.add(b);scene.add(r);return {b,ring:r}});
+const arrow=new THREE.Group();{const c=new THREE.Mesh(new THREE.ConeGeometry(0.38,1,4),new THREE.MeshBasicMaterial({color:0xffd34d}));c.rotation.x=Math.PI/2;arrow.add(c);scene.add(arrow)}
+
+/* ================= CLOCK ================= */
+let mins=90;
+function clockStr(){const h=Math.floor(mins/60)%24,m=mins%60;const hh=((h+11)%12)+1;return `${hh}:${String(m).padStart(2,'0')} ${h<12?'AM':'PM'}`}
+function advanceClock(n){mins+=n;$('#clock').textContent=clockStr();drawDash()}
+
+/* ================= AUDIO ================= */
+let actx=null;
+function beep(f,d){try{if(!actx)return;const o=actx.createOscillator(),g=actx.createGain();o.frequency.value=f||660;o.type='square';g.gain.value=.04;o.connect(g);g.connect(actx.destination);o.start();g.gain.exponentialRampToValueAtTime(0.0001,actx.currentTime+(d||.18));o.stop(actx.currentTime+(d||.18))}catch(e){}}
+const alarm=()=>{beep(880,.15);setTimeout(()=>beep(660,.2),170)};
+
+/* ================= DIALOG ================= */
+let dlg=null;
+function fmt(t){return t.replace(/\[\[(\w+)\]\]/g,(m,k)=>{const T=TERMS[k];if(!T)return k;learn(k);return `<span class="term">${T[0]}</span>`})}
+function talk(pages,done,inc){dlg={pages,i:0,done,answered:false,inc};$('#dlg').hidden=false;$('#act').hidden=true;renderDlg()}
+function renderDlg(){
+  if(dlg.pages[dlg.i].gen)dlg.pages[dlg.i]=dlg.pages[dlg.i].gen();
+  const p=dlg.pages[dlg.i];dlg.pw=false;
+  if(p.act){p.act();dlg.answered=true;return advance()}
+  dlg.answered=!p.choices;
+  $('#dWho').textContent=p.who;$('#dTxt').innerHTML=fmt(p.text);$('#dFb').innerHTML='';
+  $('#dNext').style.visibility=p.choices?'hidden':'visible';
+  $('#dCh').innerHTML=p.choices?p.choices.map((c,i)=>`<button class="ch" data-i="${i}">${c.t}</button>`).join(''):'';
+  $('#dbox').scrollTop=0;
+  document.querySelectorAll('#dCh .ch').forEach(b=>b.onclick=e=>{
+    e.stopPropagation();const c=p.choices[+b.dataset.i];
+    if(c.ok){c.onOk&&c.onOk();scoreChoice(true,p,c);beep(990,.12);setTimeout(()=>beep(1320,.12),110);$('#dCh').innerHTML='';$('#dFb').innerHTML=`<div class="fb ok">✓ ${fmt(c.why)}</div>`;dlg.answered=true;$('#dNext').style.visibility='visible'}
+    else{scoreChoice(false,p,c);beep(200,.25);b.disabled=true;$('#dFb').innerHTML=`<div class="fb">✗ ${fmt(c.why)}</div>`}
+  });
+}
+function advance(){
+  if(!dlg||!dlg.answered)return;
+  dlg.i++;
+  if(dlg.i>=dlg.pages.length){const d=dlg.done;dlg=null;$('#dlg').hidden=true;d&&d();return}
+  renderDlg();
+}
+$('#dbox').addEventListener('click',()=>advance());
+const strip=h=>h.replace(/<[^>]+>/g,' ').replace(/\[\[(\w+)\]\]/g,(m,k)=>TERMS[k]?TERMS[k][0]:k).replace(/\s+/g,' ').trim();
+function scoreChoice(ok,p,c){
+  if(mode!=='shift'||!dlg||!dlg.inc||!S)return;
+  if(ok){if(!dlg.pw){S.right++;S.score+=100}else S.score+=30}
+  else if(!dlg.pw){dlg.pw=true;S.wrong++;const good=p.choices.find(x=>x.ok);if(good)S.lessons.push(strip(good.t)+' — '+strip(good.why))}
+  updateHud();
+}
+
+/* ================= QUEST ================= */
+const TARGETS={
+ rosa:{p:[0,4.7],r:3.0,verb:'Talk to Rosa',h:3.9},
+ dash:{p:[2,-17.4],r:3.6,verb:'Look at dashboard',h:6.9,bp:[2,-18.8]},
+ rack:{p:[-17,-7],r:2.4,verb:'Check BATCHAPP02',h:3.7},
+ phone:{p:[2.4,6],r:2.1,verb:'Use phone',h:2.5},
+ dock:{p:[24,8],r:3.0,verb:'Inspect pallet',h:2.2},
+ dockCrate:{p:[24,8],r:3.0,verb:'Pick up file',h:2.4},
+ shelf:{p:[1,-10.2],r:2.4,verb:'Use job shelf',h:3.1,bp:[1,-10.7]},
+ belt:{p:[3.2,-6],r:2.1,verb:'Load the line',h:2.4},
+ scroll:{p:[16,-4.4],r:2.2,verb:'Pick up log',h:1.9},
+ marcus:{p:[18,-15.3],r:3.0,verb:'Talk to Marcus',h:3.9},
+ step30:{p:[16,-4.6],r:2.2,verb:'Restart STEP030',h:3.6,bp:[16,-6]},
+ recon:{p:[-14,10],r:2.6,verb:'Compare ledgers',h:2.4},
+ board:{p:[-13,-18],r:2.6,verb:'Write turnover',h:4.4,bp:[-13,-19.4]}
+};
+let jobsLoaded=0;
+const Q={
+ intro:{goal:'Walk to Rosa at the Ops Desk',t:'rosa',run:()=>talk([
+  {who:'Rosa',text:"Hey, you made it! I'm Rosa, the shift lead. Tonight you'll learn this job by doing it, so don't worry about knowing anything yet."},
+  {who:'Rosa',text:"Here's the big idea. Every night our computers run hundreds of programs called [[job]]s. Each one does one chunk of work, like loading today's dental claims or calculating payments to dentists."},
+  {who:'Rosa',text:"Running all of those jobs automatically, one after another, is called [[batch]] processing. Our team makes sure the batch finishes correctly and on time."},
+  {who:'Rosa',text:"A scheduler called [[tidal]] starts each job at the right moment. We watch it all on the big [[dashboard]] on the north wall. Go take a look."},
+  {who:'Tip',text:"Follow the yellow marker. Every blue word is saved in your Notebook (top right) so you can review it anytime."}
+ ],()=>go('dash'))},
+ dash:{goal:'Look at the dashboard on the north wall',t:'dash',run:()=>talk([
+  {who:'Dashboard',text:"Each tile is one job or server. <b class='g'>Green</b> means OK. <b class='y'>Yellow</b> means a warning or waiting. <b class='r'>Red</b> means something failed. Gray means it's scheduled to run later."},
+  {who:'Rosa (radio)',text:"See the BILL_CYCLE tile? It says <i>SLA 02:00</i>. An [[sla]] is the deadline a job has to finish by. If we miss it, the business notices."},
+  {who:'Rosa (radio)',text:"Quick check. A tile turns yellow. What do you do?",choices:[
+   {t:'Wait and see if it goes back to green',why:"Waiting burns time you might need. Yellow means something's off."},
+   {t:'Report it right away',ok:true,why:"Exactly. The number-one rule of this job: anything that isn't green gets reported immediately."},
+   {t:'Restart the server myself',why:"Ops doesn't restart production machines on its own. We report and coordinate."}]},
+  {act:()=>{setTile('BATCHAPP02','bad','CPU 97%');setRack(true);alarm();advanceClock(4)}},
+  {who:'Rosa (radio)',text:"Speak of the devil. BATCHAPP02 just went <b class='r'>red</b>. That's a machine in the Server Room on the west side. Go see what's happening."}
+ ],()=>go('rack'))},
+ rack:{goal:'Find the red server BATCHAPP02 in the Server Room',t:'rack',run:()=>talk([
+  {who:'BATCHAPP02',text:"<span class='mono'>ALERT  CPU 97% for 15 min   (limit 85%)</span>"},
+  {who:'Rosa (radio)',text:"That box is a [[server]], a computer that runs our jobs. CPU is how hard it's working. 97% means it's maxed out."},
+  {who:'Rosa (radio)',text:"We set a [[threshold]] at 85%. When CPU stays above it, the monitoring system fires an [[alert]]. That's what turned the tile red."},
+  {who:'Rosa (radio)',text:"So who actually fixes a server?",choices:[
+   {t:"Me. I'll unplug it and plug it back in.",why:"Never! Pulling the plug on a production server could crash every job running on it."},
+   {t:'The vendor that sends us files',why:"Vendors handle their own files. Our servers aren't theirs."},
+   {t:'The Infrastructure team',ok:true,why:"Right. The [[infrastructure]] team owns servers, storage and networks. Ops spots the problem and gets them on it."}]},
+  {who:'Rosa (radio)',text:"Head back to the red phone on the Ops Desk and call them."}
+ ],()=>go('callInfra'))},
+ callInfra:{goal:'Call Infrastructure from the red phone',t:'phone',run:()=>talk([
+  {who:'Phone',text:"Who are you calling?",choices:[
+   {t:'App Dev (the programmers)',why:"App Dev fixes job code. This is a server problem."},
+   {t:'Infrastructure',ok:true,why:"Ringing Infrastructure..."},
+   {t:'Pizza delivery',why:"Tempting at 2 AM. Not now."}]},
+  {who:'You',text:"Hi, this is Ops. BATCHAPP02 has been over 85% CPU for 15 minutes. It's red on the dashboard."},
+  {who:'Infrastructure',text:"Thanks for the heads-up, we see it. Moving the load to BATCHAPP03 now... done."},
+  {act:()=>{setTile('BATCHAPP02','ok','OK');setRack(false);advanceClock(6)}},
+  {who:'Rosa',text:"Nice. Getting the right team on the line fast is called a [[triage]]. You just ran your first one."},
+  {act:()=>{setTile('CLAIMS_LOAD','warn','WAITING');alarm()}},
+  {who:'Rosa',text:"Next: CLAIMS_LOAD just turned <b class='y'>yellow</b> and says WAITING. It's waiting on something at the Loading Dock on the east side. Go check."}
+ ],()=>go('dock'))},
+ dock:{goal:'Check the Loading Dock on the east side',t:'dock',run:()=>talk([
+  {who:'Rosa (radio)',text:"See the empty pallet? Every night our [[vendor]], Smile Data Co., sends a file full of new claims. It should be sitting right here."},
+  {who:'Rosa (radio)',text:"CLAIMS_LOAD can't start without that file. Something a job has to wait for is called a [[dependency]]. The job isn't broken. It's waiting."},
+  {who:'Rosa (radio)',text:"What's the right move?",choices:[
+   {t:'Force CLAIMS_LOAD to start without the file',why:"It would load zero claims or crash. Never skip a dependency."},
+   {t:'Call the vendor, and warn people the claims may be late',ok:true,why:"Yes. Find out where the file is, and give everyone waiting on it a heads-up."},
+   {t:'Cancel claims for tonight',why:"Way too drastic. Dentists are waiting to get paid."}]},
+  {who:'Rosa (radio)',text:"Use the red phone on the Ops Desk."}
+ ],()=>go('callVendor'))},
+ callVendor:{goal:'Call the vendor from the red phone',t:'phone',run:()=>talk([
+  {who:'Phone',text:"Who are you calling?",choices:[
+   {t:'Infrastructure',why:"Infrastructure doesn't have the vendor's file."},
+   {t:'Smile Data Co. (the vendor)',ok:true,why:"Ringing Smile Data Co..."}]},
+  {who:'Smile Data Co.',text:"Oh no, our transfer failed! Resending now. It'll land on your dock in a few seconds."},
+  {act:()=>{fileCrate.visible=true;fileCrate.position.set(24,7,8);tween(fileCrate,new THREE.Vector3(24,0.65,8),0.7,()=>beep(300,.15));advanceClock(9)}},
+  {who:'Rosa',text:"It's here! Go pick up the claims file at the dock and bring it to the Job Shelf by the Batch Line."}
+ ],()=>go('grabFile'))},
+ grabFile:{goal:'Pick up the claims file at the Loading Dock',t:'dockCrate',run:()=>{carry(fileCrate);beep(520,.1);toast('Carrying: claims file');go('shelfFile')}},
+ shelfFile:{goal:'Bring the file to the Job Shelf',t:'shelf',run:()=>{dropCarry();fileCrate.visible=false;toast('File attached to CLAIMS_LOAD');talk([
+  {act:()=>setTile('CLAIMS_LOAD','idle','READY')},
+  {who:'Rosa (radio)',text:"Perfect. CLAIMS_LOAD has its file, so its tile says READY now."},
+  {who:'Rosa (radio)',text:"On the shelf are three jobs. Some can't run until another one finishes. That's a dependency too."},
+  {who:'Rosa (radio)',text:"Your task: put them on the Batch Line one at a time, in an order that works. Start by picking one off the shelf."}
+ ],()=>go('pick'))}},
+ pick:{goal:()=>`Pick a job off the Job Shelf (${jobsLoaded}/3 loaded)`,t:'shelf',run:()=>{
+  const left=JOBS.slice(jobsLoaded),correct=JOBS[jobsLoaded];
+  talk([{who:'Job Shelf',text:"Which job goes on the line next?",choices:left.map(j=>({t:`<b>${j.name}</b><br><span style="color:var(--muted);font-size:13px">${j.needs.length?'Needs: '+j.needs.join(' + '):'Needs nothing'}</span>`,ok:j===correct,
+     why:j===correct?`${j.name} can run now. Everything it needs is done.`:`${j.name} needs ${j.needs.filter(n=>!n.includes('arrived')&&!JOBS.slice(0,jobsLoaded).some(x=>x.name===n)).join(' and ')} to finish first.`}))},
+   {act:()=>{carry(correct.crate)}}],()=>go('belt'))}},
+ belt:{goal:'Carry the job to LOAD HERE on the Batch Line',t:'belt',run:()=>{
+  const j=JOBS[jobsLoaded];dropCarry();jobsLoaded++;beep(520,.1);
+  setTile(j.name,'run','RUNNING');
+  if(j.name==='CLAIMS_LOAD'){sendDown(j.crate,16,abend);talk([{who:'Rosa (radio)',text:"CLAIMS_LOAD is rolling. Watch it go..."}],()=>go('watch'));return}
+  sendDown(j.crate,18.4,()=>{j.crate.visible=false;setTile(j.name,'ok','EOJ');toast(j.name+' · EOJ ✓');beep(880,.1);advanceClock(5)});
+  if(j.name==='CLAIMS_EXTRACT')talk([
+   {who:'Rosa (radio)',text:"There it goes. Each arch on the line is a [[step]], one stage of the job. A job runs its steps in order: STEP010, STEP020, STEP030."},
+   {who:'Rosa (radio)',text:"When a job reaches the end with no errors, that's [[eoj]], short for End of Job. The tile turns green. Grab the next job while this one runs."}
+  ],()=>go('pick'));
+  else talk([{who:'Rosa (radio)',text:"Good order. VALIDATE needed EXTRACT first, and you did that. One more."}],()=>go('pick'));
+ }},
+ watch:{goal:'Watch CLAIMS_LOAD run down the Batch Line',t:null},
+ abend:{goal:'Pick up the log next to STEP030',t:'scroll',run:()=>{carry(scroll);talk([
+  {who:'Job log',text:"<pre>02:14:01 STEP010  RC=0000\n02:14:09 STEP020  RC=0000\n02:14:15 STEP030  ABEND S0C7\n         CLAIM C2207  AMOUNT='12O.00'</pre>"},
+  {who:'Rosa (radio)',text:"Read the last lines. STEP010 and STEP020 were fine. STEP030 crashed on claim C2207, whose amount says 12<b>O</b>.00, with the letter O instead of a zero. That's the bad data."},
+  {who:'Rosa (radio)',text:"Should you just rerun it?",choices:[
+   {t:'Yes, rerun until it works',why:"It'll hit the same bad record and fail the same way every time."},
+   {t:'No. Get the bad data fixed first.',ok:true,why:"Right. The data has to be fixed by the people who own the code. Take the log to Marcus in App Dev, northeast corner."}]}
+ ],()=>go('marcus'))}},
+ marcus:{goal:'Bring the log to Marcus in App Dev',t:'marcus',run:()=>talk([
+  {who:'Marcus',text:"Hey, I'm Marcus from [[appdev]]. I write and fix the programs your jobs run. What've you got?"},
+  {who:'Marcus',text:"(What do you tell him?)",choices:[
+   {t:'"Something broke. Can you fix it?"',why:"Marcus has no idea which job, what error, or where. Always bring details."},
+   {t:'"CLAIMS_LOAD abended S0C7 in STEP030. Claim C2207 has a bad amount. Here\'s the log."',ok:true,why:"That's how you [[escalate]]: hand the problem to the team that can fix it, with everything they need."},
+   {t:'"I reran it five times and it keeps failing."',why:"Rerunning bad data just fails again and wastes time before the SLA."}]},
+  {act:()=>{const s=dropCarry();if(s)s.visible=false;advanceClock(12)}},
+  {who:'Marcus',text:"Great report. I fixed the record, so it's 120.00 now. You don't need to rerun the whole job. Just [[restart]] it from STEP030, where it failed."},
+  {who:'Marcus',text:"Go back to STEP030 on the Batch Line and restart it."}
+ ],()=>go('restart'))},
+ restart:{goal:'Restart CLAIMS_LOAD at STEP030',t:'step30',run:()=>{
+  const j=JOBS[2];smoking=false;stationLights[2].material.color.set(0x45c983);j.crate.userData.box.material=mat(j.color);
+  setTile('CLAIMS_LOAD','run','RUNNING');beep(660,.1);
+  const it=belt.find(b=>b.crate===j.crate);it.target=18.4;it.done=false;it.onArrive=()=>{j.crate.visible=false;setTile('CLAIMS_LOAD','ok','EOJ');toast('CLAIMS_LOAD · EOJ ✓');beep(880,.1);
+    setTile('PAY_CALC','run','RUNNING');setTimeout(()=>{setTile('PAY_CALC','ok','EOJ');advanceClock(10);talk([
+     {who:'Rosa (radio)',text:"CLAIMS_LOAD hit EOJ! That kicked off PAY_CALC, which just calculated tonight's payments to dentists. Look at the dashboard: all green."},
+     {who:'Rosa (radio)',text:"One last check before morning. Head to the Reconciliation desk in the southwest corner."}],()=>go('recon'))},1800)};
+  go('watch2');
+ }},
+ watch2:{goal:'Watch CLAIMS_LOAD finish',t:null},
+ recon:{goal:'Compare the ledgers at the Reconciliation desk',t:'recon',run:()=>talk([
+  {who:'Rosa (radio)',text:"The Payments ledger says what we paid. The Billing ledger says what dentists billed. They should match. Checking two systems against each other is called [[reconcile]]."},
+  {who:'Ledgers',text:"<pre>CLAIM    PAID     BILLED\nC1001   120.00   120.00\nC1002    85.50    58.50\nC1003   240.00   240.00</pre>Which claim doesn't match?",choices:[
+   {t:'C1001',why:'120.00 and 120.00. Those match.'},
+   {t:'C1002',ok:true,why:'85.50 vs 58.50. Someone swapped two digits. You flag it for the business to look into.'},
+   {t:'C1003',why:'240.00 and 240.00. Those match.'}]},
+  {who:'Rosa (radio)',text:"Sharp eyes. On the real job you'd compare thousands of rows with Excel or a database query, but the idea is exactly this."},
+  {who:'Rosa (radio)',text:"Last thing: the Turnover board on the north wall, left of the dashboard."}
+ ],()=>go('turnover'))},
+ turnover:{goal:'Write the shift turnover on the north wall',t:'board',run:()=>talk([
+  {who:'Rosa (radio)',text:"Before you go home you write the [[turnover]]: a handoff note so the next shift knows what happened."},
+  {who:'Turnover board',text:"What goes in the turnover?",choices:[
+   {t:'Nothing. Everything is green now.',why:"The next shift needs the history. If someone asks about C1002, they need to know it was flagged."},
+   {t:"What failed, what you did about it, and what's still open",ok:true,why:"That's it: failures, fixes, and open items."},
+   {t:'Just "busy night"',why:"Too vague to help anyone."}]},
+  {act:()=>{drawTurnover(true);advanceClock(20)}},
+  {who:'Rosa (radio)',text:"Looks great. Come see me at the Ops Desk."}
+ ],()=>go('final'))},
+ final:{goal:'Report back to Rosa',t:'rosa',run:()=>talk([
+  {who:'Rosa',text:"You just ran a full night shift: a server alert, a late vendor file, job dependencies, an abend, an escalation, a restart, a reconciliation and a turnover."},
+  {who:'Rosa',text:"That's this job. The real dashboard just has more tiles. Review your Notebook until every word feels normal, and you'll walk into that interview sounding like you've done it before."}
+ ],()=>{mins=360;showEnd()})}
+};
+let qid='intro';
+function go(id){qid=id;const g=Q[id].goal;$('#obj').textContent=typeof g==='function'?g():g;save()}
+/* ================= SAVE ================= */
+const SAVE_KEY='nightShiftSave_v1';
+let shifts=0;
+function save(){if(!started||mode!=='tutorial')return;try{localStorage.setItem(SAVE_KEY,JSON.stringify({qid,jobsLoaded,learned,mins,x:player.position.x,z:player.position.z,shifts}))}catch(e){}}
+function loadSave(){try{return JSON.parse(localStorage.getItem(SAVE_KEY)||'null')}catch(e){return null}}
+const ORDER=Object.keys(Q);
+function restore(s){
+  let q=s.qid,jl=s.jobsLoaded||0;
+  if(q==='belt')q='pick';
+  if(q==='watch'){q='pick';jl=2}
+  if(q==='watch2')q='restart';
+  if(!Q[q])q='intro';
+  const at=id=>ORDER.indexOf(q)>=ORDER.indexOf(id);
+  mins=s.mins||90;
+  (s.learned||[]).forEach(k=>{if(TERMS[k]&&!learned.includes(k))learned.push(k)});$('#nbCount').textContent=learned.length;
+  if(at('rack')){setTile('BATCHAPP02','bad','CPU 97%');setRack(true)}
+  if(at('dock')){setTile('BATCHAPP02','ok','OK');setRack(false);setTile('CLAIMS_LOAD','warn','WAITING')}
+  if(q==='grabFile'){fileCrate.visible=true;fileCrate.position.set(24,0.65,8)}
+  if(at('pick'))setTile('CLAIMS_LOAD','idle','READY');
+  if(at('abend'))jl=3;
+  jobsLoaded=jl;
+  for(let i=0;i<Math.min(jl,2);i++){JOBS[i].crate.visible=false;setTile(JOBS[i].name,'ok','EOJ')}
+  if(at('abend')&&!at('recon')){
+    const j=JOBS[2];j.crate.position.set(16,1.25,-6);j.crate.userData.box.material=mat(0xd83a3a);
+    belt.push({crate:j.crate,target:16,done:true});stationLights[2].material.color.set(0xf04848);smoking=true;setTile('CLAIMS_LOAD','bad','ABEND S0C7');
+    if(q==='abend'){scroll.position.set(16,0.3,-4.4);scroll.visible=true}
+    if(q==='marcus')carry(scroll);
+  }
+  if(at('recon')){JOBS[2].crate.visible=false;setTile('CLAIMS_LOAD','ok','EOJ');setTile('PAY_CALC','ok','EOJ')}
+  if(at('final'))drawTurnover(true);
+  if(typeof s.x==='number'&&!blocked(s.x,s.z))player.position.set(s.x,0,s.z);
+  camera.position.copy(player.position).add(camOff);
+  $('#clock').textContent=clockStr();drawDash();
+  go(q);
+  toast('Welcome back. Picking up where you left off.');
+}
+function abend(){
+  const j=JOBS[2];j.crate.userData.box.material=mat(0xd83a3a);smoking=true;stationLights[2].material.color.set(0xf04848);
+  setTile('CLAIMS_LOAD','bad','ABEND S0C7');alarm();setTimeout(alarm,400);
+  scroll.position.set(16,0.3,-4.4);scroll.visible=true;
+  talk([
+   {who:'Rosa (radio)',text:"Uh oh. CLAIMS_LOAD crashed at STEP030. A crash is called an [[abend]], short for <i>abnormal end</i>."},
+   {who:'Rosa (radio)',text:"Every abend has a code. This one is [[s0c7]], which means bad data, like a letter sitting where a number should be."},
+   {who:'Rosa (radio)',text:"Every job writes a [[log]], a diary of each step it ran. The log just dropped next to STEP030. Go grab it."}
+  ],()=>go('abend'));
+}
+function showEnd(){
+  career.tutorialDone=true;saveCareer();
+  shifts++;try{localStorage.setItem(SAVE_KEY,JSON.stringify({shifts}))}catch(e){}
+  $('#endTxt').textContent=`Shift #${shifts} done. You learned ${learned.length} words of the job by doing it. These are the exact things the Associate Operations Analyst posting asks for: watching the dashboard, reporting anything not green, triage calls, Tidal logs, coordinating with vendors and developers, and reconciling payments with billing.`;
+  termList($('#endList'));$('#end').hidden=false;
+}
+
+/* ================= CAREER + REAL SHIFTS ================= */
+let mode='tutorial';
+const CAREER_KEY='nightShiftCareer_v1';
+let career={tutorialDone:false,level:1,xp:0,shifts:0,best:{},learned:[],seen:[]};
+try{const c=JSON.parse(localStorage.getItem(CAREER_KEY)||'null');if(c)Object.assign(career,c)}catch(e){}
+function saveCareer(){career.learned=learned.slice();try{localStorage.setItem(CAREER_KEY,JSON.stringify(career))}catch(e){}}
+(career.learned||[]).forEach(k=>{if(TERMS[k]&&!learned.includes(k))learned.push(k)});$('#nbCount').textContent=learned.length;
+
+const RANKS=['Trainee','Junior Operator','Operator','Associate Analyst','Ops Analyst','Senior Analyst','Shift Lead'];
+const rankFor=L=>RANKS[Math.min(L,RANKS.length-1)];
+function cfg(L){
+  const kinds=['server','vendor','eoj'];
+  if(L>=2)kinds.push('abend','order');
+  if(L>=3)kinds.push('recon','late');
+  const codes=['S0C7','SB37'];if(L>=3)codes.push('S806','S222');if(L>=4)codes.push('S322');
+  return {L,kinds,codes,count:Math.min(11,3+L),maxActive:L<2?1:L<4?2:3,sla:Math.max(55,125-L*10),gap:Math.max(5,15-L*1.5),
+    dlgSpeed:L<3?0:L<5?0.5:0.8,jobs:L<3?3:L<4?4:5,rows:L<3?3:L<4?4:L<5?5:6,arrow:L<3,hintCost:L<3?0:25};
+}
+const rand=n=>Math.floor(Math.random()*n);
+const pick=a=>a[rand(a.length)];
+const shuf=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=rand(i+1);[a[i],a[j]]=[a[j],a[i]]}return a};
+const fmtT=t=>{t=Math.max(0,Math.ceil(t));return Math.floor(t/60)+':'+String(t%60).padStart(2,'0')};
+const JOBPOOL=['CLAIMS_LOAD','PAY_CALC','BILL_CYCLE','ELIG_SYNC','REMIT_835','GL_POST','PROV_FEED','MEMBER_IDX','FEE_SCHED','DENTAL_ADJ','CLAIMS_EDIT','STMT_PRINT'];
+racks.forEach((r,i)=>r.name='BATCHAPP'+String(i+1).padStart(2,'0'));
+const KMULT={server:1,vendor:1.7,eoj:.7,abend:1.6,order:1,recon:.8,late:1.1};
+const EXCL=['vendor','order','recon','late','abend'];
+const INTRO={
+ server:"Heads up: server alerts show up in the Server Room. Read the alert, then call whoever owns servers.",
+ vendor:"When a tile says WAITING, the job is missing something. Usually a vendor file at the Loading Dock.",
+ eoj:"A blue EOJ tile means a job finished and someone is waiting on it. Let them know.",
+ abend:"New tonight: abends. A red crate on the Batch Line means a job crashed. Read the log, figure out the code, get it to the right team, then restart.",
+ order:"New tonight: job releases. When jobs land on the shelf, release them so each one's needs finish first.",
+ recon:"New tonight: reconciliation. When the RECON tile goes yellow, compare the ledgers at the desk in the southwest.",
+ late:"New tonight: SLA risk. A LONG RUN tile means a job may miss its deadline. Warn people early."
+};
+const ABEND={
+ S0C7:{mean:'Bad data, like letters in a number field',to:'marcus',extra:()=>`  CLAIM C${2000+rand(900)} AMOUNT='1O${rand(9)}.00'`,detail:'A claim has a bad amount.',fix:'Found it: a letter O instead of a zero. Fixed the record.'},
+ SB37:{mean:'The job ran out of space writing its output',to:'infra',extra:()=>'  IEC030I B37-04 OUTPUT DATASET FULL',fix:'Infrastructure added more space for the output.'},
+ S806:{mean:'The program it tried to run could not be found',to:'marcus',extra:()=>`  CSV003I REQUESTED MODULE ${pick(['PAYCALC2','CLMEDIT4','BILLRUN7'])} NOT FOUND`,detail:'The program is missing. Looks tied to today\'s [[change]].',fix:'The new program never got deployed with the change. It\'s deployed now.'},
+ S222:{mean:'Someone cancelled the job on purpose',to:'board',extra:()=>'  JOB CANCELLED BY OPERATOR DAYSHIFT1',fix:''},
+ S322:{mean:'The job ran past its CPU time limit',to:'marcus',extra:()=>'  IEF450I TIME LIMIT EXCEEDED',detail:'It ran way longer than normal before hitting the time limit.',fix:'There was a loop in the new code. Fixed it.'}
+};
+let C=null,S=null;
+const pendingRadio=[];
+function radio(text){pendingRadio.push([{who:'Rosa (radio)',text}])}
+
+/* shift-only visuals */
+const rackOn=new Set();
+const rackTags=new Map();
+function setRackAlarm(r,on){if(on){rackOn.add(r);const l=label(r.name,{fs:34,bg:'rgba(201,60,60,.9)'});l.position.set(r.x,3.2,r.z);scene.add(l);rackTags.set(r,l)}else{rackOn.delete(r);const l=rackTags.get(r);if(l){scene.remove(l);rackTags.delete(r)}r.leds.forEach(l=>l.material.color.set(0x3bd47a))}}
+const smokeXs=new Set();
+
+function freeJob(){const used=S.active.map(a=>a.job);return pick(JOBPOOL.filter(j=>!used.includes(j)))}
+function pt(id,verb){const T=TARGETS[id];return Object.assign({},T,verb?{verb}:{})}
+
+const MAKE={
+ server(inc){
+  const r=pick(racks.filter(x=>!rackOn.has(x)));inc.rack=r;setRackAlarm(r,true);
+  const V=[{m:'CPU 97% for 15 min (limit 85%)',why:'The server is maxed out and has stayed above its limit',lbl:'CPU 97%'},
+   {m:'DISK /batch 96% full (limit 90%)',why:'The disk is almost out of space',lbl:'DISK 96%'},
+   {m:'MEMORY 94% for 10 min (limit 85%)',why:'The server is running out of memory',lbl:'MEM 94%'},
+   {m:'NO HEARTBEAT for 5 min',why:'The server stopped checking in and may be down',lbl:'NO SIGNAL'}];
+  const v=pick(V);
+  Object.assign(inc,{title:`${r.name} ${v.lbl}`,tile:r.name,status:'bad',label:v.lbl,log:`${r.name} ${v.lbl} -> Infrastructure`});
+  inc.stages=[
+   {pt:{p:[r.x,r.z],r:2.4,verb:'Check '+r.name,h:3.7},hint:`Walk to ${r.name} in the Server Room and read its alert.`,run:(inc,next)=>talk([
+     {who:r.name,text:`<span class='mono'>ALERT  ${v.m}</span>`},
+     {who:'You (thinking)',text:'What does this alert mean?',choices:shuf([{t:v.why,ok:true,why:'Right. It crossed a [[threshold]], so monitoring raised an [[alert]].'},
+       ...shuf(V.filter(x=>x!==v)).slice(0,2).map(x=>({t:x.why,why:'That\'s a different alert. Read the alert line again.'}))])}
+    ],next,inc)},
+   {pt:pt('phone'),hint:'Servers belong to the Infrastructure team. Call them from the red phone.',run:(inc,next)=>talk([
+     {who:'Phone',text:`Who do you call about ${r.name}?`,choices:shuf([{t:'Infrastructure',ok:true,why:'[[infrastructure]] owns servers. They\'re on it.'},
+       {t:'App Dev',why:'App Dev fixes program code, not servers.'},{t:'The vendor',why:'Vendors send files. They don\'t run our servers.'}].concat(C.L>=3?[{t:'Nobody. I\'ll restart it myself.',why:'Ops never restarts production servers on its own.'}]:[]))},
+     {who:'Infrastructure',text:pick(['Thanks, we see it. Fixing it now.','Got it. Moving work off that box.','On it. Should be green in a minute.'])}
+    ],next,inc)}];
+  inc.cleanup=()=>setRackAlarm(r,false);
+ },
+ vendor(inc){
+  const job=freeJob(),ven=pick(['Smile Data Co.','BrightClaims','ToothLink EDI','ClearBenefit']);
+  Object.assign(inc,{job,title:`${job} waiting on file`,tile:job,status:'warn',label:'WAITING',log:`${job} file late from ${ven} -> resent`});
+  const others=['Smile Data Co.','BrightClaims','ToothLink EDI','ClearBenefit'].filter(v=>v!==ven);
+  inc.stages=[
+   {pt:pt('dock','Inspect pallet'),hint:'Check the Loading Dock to see what the job is waiting on.',run:(inc,next)=>talk([
+     {who:'Loading Dock',text:`The pallet is empty. ${job} needs tonight's file from ${ven}. That file is a [[dependency]].`},
+     {who:'You (thinking)',text:'What now?',choices:shuf([{t:`Call ${ven}, and warn the [[requester]] the job may be late`,ok:true,why:'Find the file, and give the people waiting a heads-up.'},
+       {t:`Force ${job} to start without the file`,why:'Never skip a dependency. It would process nothing or crash.'},{t:'Wait until morning',why:'Waiting risks the SLA. Act now.'}])}
+    ],next,inc)},
+   {pt:pt('phone'),hint:`Call ${ven} from the red phone.`,run:(inc,next)=>talk([
+     {who:'Phone',text:'Who do you call?',choices:shuf([{t:ven,ok:true,why:`Calling the [[vendor]] that owns the file.`},{t:pick(others),why:`Wrong vendor. ${job}'s file comes from ${ven}.`},{t:'Infrastructure',why:'Infrastructure doesn\'t have the vendor\'s file.'}])},
+     {who:ven,text:'So sorry, our transfer failed. Resending now.'},
+     {act:()=>{fileCrate.visible=true;fileCrate.position.set(24,7,8);tween(fileCrate,new THREE.Vector3(24,0.65,8),0.7,()=>beep(300,.15))}}
+    ],next,inc)},
+   {pt:pt('dockCrate'),hint:'The file landed on the dock. Pick it up.',run:(inc,next)=>{carry(fileCrate);inc.carry=fileCrate;beep(520,.1);next()}},
+   {pt:pt('shelf','Deliver file'),hint:'Bring the file to the Job Shelf by the Batch Line.',run:(inc,next)=>{dropCarry();fileCrate.visible=false;inc.carry=null;toast(job+' has its file');next()}}];
+  inc.cleanup=()=>{if(carried===fileCrate)dropCarry();fileCrate.visible=false};
+ },
+ eoj(inc){
+  const job=freeJob(),req='REQ-'+(4000+rand(999));
+  Object.assign(inc,{job,title:`${job} finished`,tile:job,status:'run',label:'EOJ',log:`${job} EOJ -> notified ${req}`});
+  inc.stages=[{pt:pt('phone'),hint:`${job} finished. Tell whoever is waiting on ${req}.`,run:(inc,next)=>talk([
+    {who:'Tidal',text:`${job} ended RC=0000. Request ${req} is waiting on it.`},
+    {who:'You (thinking)',text:'What do you do?',choices:shuf([{t:`Notify the requester of [[eoj]] and update ${req}`,ok:true,why:'Closing the loop is part of the job.'},
+      {t:'Nothing. It\'s green.',why:'Someone is waiting on this. Always tell the requester.'},{t:'Rerun it to be safe',why:'Never rerun a job that finished cleanly. It could double-pay claims.'}])}
+   ],next,inc)}];
+  inc.doneLabel='EOJ';
+ },
+ abend(inc){
+  const job=freeJob(),code=pick(C.codes),st=rand(3),x=[8,12,16][st],step=['STEP010','STEP020','STEP030'][st],D=ABEND[code];
+  Object.assign(inc,{job,title:`${job} abend ${code}`,tile:job,status:'bad',label:code,log:`${job} ${code} in ${step} -> ${D.to==='infra'?'Infrastructure':D.to==='board'?'planned cancel':'App Dev'}, restarted`});
+  const crate=makeCrate(0xd83a3a,job.length>11?job.slice(0,11):job);crate.position.set(x,1.25,-6);
+  smokeXs.add(x);stationLights[st].material.color.set(0xf04848);
+  const lines=['01:10:01 TIDAL  JOB '+job+' SUBMITTED'];
+  for(let i=0;i<st;i++)lines.push(`01:1${i+1}:0${i+2} STEP0${i+1}0  RC=0000`);
+  lines.push(`01:1${st+1}:44 ${step}  ABEND=${code}`,D.extra());
+  const wrongMeans=Object.keys(ABEND).filter(k=>k!==code).map(k=>ABEND[k].mean);
+  const st1={pt:{p:[x,-4.6],r:2.2,verb:'Read log at '+step,h:3.6,bp:[x,-6]},hint:'Go to the red crate on the Batch Line and read its log.',run:(inc,next)=>talk([
+    {who:'Job log',text:`<pre>${lines.join('\n')}</pre>`},
+    {who:'You (thinking)',text:`What does [[${code.toLowerCase()}]] mean?`,choices:shuf([{t:D.mean,ok:true,why:`Right. That's what ${code} means.`},...shuf(wrongMeans).slice(0,2).map(t=>({t,why:'That\'s a different abend code.'}))])},
+    {act:()=>{scroll.visible=true;carry(scroll);inc.carry=scroll}}
+   ],next,inc)};
+  let st2;
+  if(D.to==='marcus')st2={pt:pt('marcus'),hint:`${code} is a code problem. Bring the log to Marcus in App Dev.`,run:(inc,next)=>talk([
+    {who:'Marcus',text:'Hey. What happened?'},
+    {who:'You',text:'(What do you tell him?)',choices:shuf([{t:`"${job} abended ${code} in ${step}. ${D.detail} Here's the log."`,ok:true,why:'A clean [[escalate]]: job, code, step, details, and the log.'},
+      {t:'"Something broke. Can you look?"',why:'Too vague. Always give the job, code and step.'},{t:'"I reran it a few times and it keeps failing."',why:'Rerunning without fixing the cause just wastes time before the SLA.'}])},
+    {act:()=>{dropCarry();scroll.visible=false;inc.carry=null}},
+    {who:'Marcus',text:`${D.fix} Go [[restart]] it from ${step}.`}
+   ],next,inc)};
+  else if(D.to==='infra')st2={pt:pt('phone'),hint:'Out of space is a storage problem. Call Infrastructure.',run:(inc,next)=>talk([
+    {who:'Phone',text:'Who can fix an out-of-space abend?',choices:shuf([{t:'Infrastructure (storage)',ok:true,why:'Storage belongs to Infrastructure.'},{t:'App Dev',why:'The code is fine. The disk is full. That\'s Infrastructure.'},{t:'The vendor',why:'Not the vendor\'s problem.'}])},
+    {act:()=>{dropCarry();scroll.visible=false;inc.carry=null}},
+    {who:'Infrastructure',text:`${D.fix} You're clear to restart from ${step}.`}
+   ],next,inc)};
+  else st2={pt:pt('board','Check turnover notes'),hint:'S222 means someone cancelled it. Check the Turnover board to see if it was planned.',run:(inc,next)=>talk([
+    {who:'Turnover board',text:`Day shift note: "${job} cancelled on purpose for CHG-${3000+rand(900)}. OK to restart after 01:00."`},
+    {who:'You (thinking)',text:'What now?',choices:shuf([{t:'It was planned. Restart it like the note says.',ok:true,why:'Checking the [[turnover]] first saved a pointless escalation.'},{t:'Report it to App Dev as a bug',why:'It isn\'t a bug. The cancel was planned.'},{t:'Leave it cancelled',why:'The note says to restart it. Leaving it blows the SLA.'}])},
+    {act:()=>{dropCarry();scroll.visible=false;inc.carry=null}}
+   ],next,inc)};
+  const st3={pt:{p:[x,-4.6],r:2.2,verb:'Restart '+step,h:3.6,bp:[x,-6]},hint:`Restart ${job} from ${step}.`,run:(inc,next)=>{
+    smokeXs.delete(x);stationLights[st].material.color.set(0x45c983);crate.userData.box.material=mat(0x45c983);beep(660,.1);
+    belt.push({crate,target:18.4,done:false,onArrive:()=>{scene.remove(crate)}});inc.crate=null;next()}};
+  inc.stages=[st1,st2,st3];inc.crate=crate;inc.doneLabel='EOJ';
+  inc.cleanup=()=>{smokeXs.delete(x);stationLights[st].material.color.set(0x45c983);if(inc.crate)scene.remove(inc.crate);if(carried===scroll)dropCarry();scroll.visible=false};
+ },
+ order(inc){
+  const names=shuf(JOBPOOL).slice(0,C.jobs);
+  const jobs=names.map((n,i)=>({n,deps:i===0?[]:shuf(names.slice(0,i)).slice(0,i>=2&&Math.random()<.4?2:Math.random()<.25?0:1)}));
+  if(!jobs.some(j=>j.deps.length))jobs[1].deps=[jobs[0].n];
+  Object.assign(inc,{title:`${C.jobs} jobs to release`,tile:'NIGHT_CYCLE',status:'idle',label:'RELEASE',log:`Released ${C.jobs} jobs in dependency order`,done:[]});
+  const pages=jobs.map((_,k)=>({gen:()=>({who:'Job Shelf',text:`Release job ${k+1} of ${jobs.length}. Which one can run now?`,
+    choices:shuf(jobs.filter(j=>!inc.done.includes(j.n))).map(j=>{const miss=j.deps.filter(d=>!inc.done.includes(d));
+      return {t:`<b>${j.n}</b><br><span style="color:var(--muted);font-size:13px">${j.deps.length?'Needs: '+j.deps.join(' + '):'Needs nothing'}</span>`,ok:!miss.length,
+        why:miss.length?`${j.n} still needs ${miss.join(' and ')}. That's an unmet [[dependency]].`:`${j.n} released.`,onOk:()=>inc.done.push(j.n)}})})}));
+  pages.push({act:()=>{jobs.forEach((j,i)=>setTimeout(()=>{const c=makeCrate([0x4f9be0,0x9b6fe0,0xe0a24f,0x45c983,0x5ac8c8][i%5]);sendDown(c,18.4,()=>scene.remove(c))},i*900))}});
+  inc.stages=[{pt:pt('shelf','Release jobs'),hint:'At the Job Shelf, release each job only after everything it needs has run.',run:(inc,next)=>talk(pages,next,inc)}];
+  inc.doneLabel='EOJ';
+ },
+ recon(inc){
+  const n=C.rows,bad=rand(n),rows=[];
+  for(let i=0;i<n;i++){const id='C'+(1000+rand(9000));const amt=(20+rand(480))+[0,0.5,0.25,0.75][rand(4)];let b=amt;
+    if(i===bad){const s=amt.toFixed(2);const d=s.replace('.','').split('');let k=rand(d.length-1);if(d[k]===d[k+1])k=0;[d[k],d[k+1]]=[d[k+1],d[k]];b=parseFloat(d.slice(0,-2).join('')+'.'+d.slice(-2).join(''));if(b===amt)b=amt+9}
+    rows.push({id,p:amt,b})}
+  const B=rows[bad];
+  Object.assign(inc,{title:'Reconciliation check',tile:'RECON',status:'warn',label:'CHECK',log:`RECON: ${B.id} paid ${B.p.toFixed(2)} vs billed ${B.b.toFixed(2)} -> flagged`});
+  const tbl='CLAIM    PAID      BILLED\n'+rows.map(r=>`${r.id}   ${r.p.toFixed(2).padStart(7)}   ${r.b.toFixed(2).padStart(7)}`).join('\n');
+  inc.stages=[{pt:pt('recon'),hint:'At the Reconciliation desk, find the claim where paid and billed differ.',run:(inc,next)=>talk([
+    {who:'Ledgers',text:`<pre>${tbl}</pre>Which claim doesn't match?`,choices:rows.map(r=>({t:r.id,ok:r===B,why:r===B?`${r.p.toFixed(2)} vs ${r.b.toFixed(2)}. Flagged for billing to review. That's how you [[reconcile]].`:`${r.id}: ${r.p.toFixed(2)} and ${r.b.toFixed(2)} match. Look closer.`}))}
+   ],next,inc)}];
+ },
+ late(inc){
+  const job=freeJob();
+  Object.assign(inc,{job,title:`${job} running long`,tile:job,status:'warn',label:'LONG RUN',log:`${job} SLA risk -> business warned`});
+  inc.stages=[
+   {pt:pt('dash','Read dashboard'),hint:'Look at the dashboard to see why the job is flagged.',run:(inc,next)=>talk([
+     {who:'Dashboard',text:`${job} has been running ${60+rand(30)} min. It usually takes ${25+rand(15)}. Its [[sla]] is in 20 minutes.`},
+     {who:'You (thinking)',text:'What do you do?',choices:shuf([{t:'Warn the people who depend on it now, and keep watching',ok:true,why:'Early warning gives them time to plan.'},
+       {t:'Kill the job so it stops being late',why:'Killing a running job can corrupt data. Never kill without direction.'},{t:'Wait until the SLA is actually missed',why:'By then it\'s too late. Warn early.'}])}
+    ],next,inc)},
+   {pt:pt('phone'),hint:`Call the business owners who depend on ${job}.`,run:(inc,next)=>talk([
+     {who:'Phone',text:'Who do you call?',choices:shuf([{t:`The business owners waiting on ${job}`,ok:true,why:'They need the heads-up.'},{t:'The vendor',why:'Vendors don\'t own our deadlines.'},{t:'Pizza delivery',why:'Not now.'}])},
+     {who:'Business owner',text:'Thanks for the warning. We\'ll plan around it.'}
+    ],next,inc)}];
+  inc.doneLabel='EOJ';
+ }
+};
+
+function setTileFor(inc){
+  let t=TILES.find(x=>x[0]===inc.tile);
+  if(!t){t=TILES.slice().reverse().find(x=>!S.active.some(a=>a.tile===x[0]));t[0]=inc.tile}
+  t[1]=inc.status;t[2]=inc.label;
+}
+function tileDone(inc,label,status){const t=TILES.find(x=>x[0]===inc.tile);if(t){t[1]=status||'ok';t[2]=label}}
+
+function startShift(sv){
+  mode='shift';C=cfg(career.level);
+  S={active:[],spawned:0,spawnIn:4,elapsed:0,score:0,right:0,wrong:0,misses:0,hints:0,ids:0,log:[],lessons:[],endReady:false,over:false,intro:C.kinds.filter(k=>!career.seen.includes(k))};
+  // reset world from tutorial
+  JOBS.forEach(j=>j.crate.visible=false);rackLbl.visible=false;setRack(false);
+  TILES.length=0;['CLAIMS_LOAD','PAY_CALC','BILL_CYCLE','ELIG_SYNC','REMIT_835','GL_POST','PROV_FEED','BATCHAPP01'].forEach((n,i)=>TILES.push([n,i%3===0?'idle':'ok',i%3===0?'SCHEDULED':'OK']));
+  drawTurnover(false);mins=60;$('#clock').textContent=clockStr();drawDash();
+  player.position.set(0,0,9.5);
+  started=true;$('#saveBtn').hidden=false;
+  if(sv){
+    ['score','right','wrong','misses','hints','spawned','elapsed','log','lessons','endReady','intro'].forEach(k=>{if(sv[k]!==undefined)S[k]=sv[k]});
+    (sv.active||[]).forEach(a=>{const inc={id:++S.ids,kind:a.kind,si:0,busy:false,wrongs:0};MAKE[a.kind](inc);inc.sla=Math.round(C.sla*KMULT[a.kind]);inc.t=Math.max(20,a.t);S.active.push(inc);setTileFor(inc)});
+    if(typeof sv.x==='number'&&!blocked(sv.x,sv.z))player.position.set(sv.x,0,sv.z);
+    camera.position.copy(player.position).add(camOff);drawDash();updateHud();
+    toast('Shift resumed. Open incidents restart from their first step.');return;
+  }
+  talk([{who:'Rosa (radio)',text:career.shifts===0&&career.level===1?
+     "This is a real shift. No more step-by-step. Alerts will pop up on the dashboard with an SLA timer. Fix each one before its timer hits zero. Follow the markers, and if you get stuck, come ask me at the Ops Desk."
+     :`Shift ${career.shifts+1}. You're at level ${C.L}, ${rankFor(C.L)}. Expect ${C.count} incidents tonight${C.maxActive>1?`, up to ${C.maxActive} at once`:''}.${C.dlgSpeed>0?' Heads up: timers keep running while you talk now.':''}`}],null);
+  updateHud();
+}
+function spawn(){
+  const pool=C.kinds.filter(k=>!(EXCL.includes(k)&&S.active.some(a=>a.kind===k)));
+  let kind=S.intro.find(k=>pool.includes(k));
+  if(kind)S.intro.splice(S.intro.indexOf(kind),1);else kind=pick(pool);
+  const inc={id:++S.ids,kind,si:0,busy:false,wrongs:0};
+  MAKE[kind](inc);inc.sla=Math.round(C.sla*KMULT[kind]);inc.t=inc.sla;
+  S.active.push(inc);S.spawned++;setTileFor(inc);drawDash();alarm();
+  if(!career.seen.includes(kind)){career.seen.push(kind);saveCareer();radio(INTRO[kind])}
+  else toast(`New alert: <b>${inc.title}</b>`);
+}
+function stageNext(inc){
+  inc.busy=false;inc.si++;
+  if(inc.si>=inc.stages.length)resolve(inc,true);
+  updateHud();
+}
+function resolve(inc,ok){
+  S.active.splice(S.active.indexOf(inc),1);
+  if(ok){const bonus=Math.round(inc.t*1.5);S.score+=bonus;tileDone(inc,inc.doneLabel||'OK');toast(`Resolved: <b>${inc.title}</b> · +${bonus} time bonus`);beep(880,.1);S.log.push(inc.log)}
+  else{S.score-=150;S.misses++;tileDone(inc,'MISSED','warn');inc.cleanup&&inc.cleanup();toast(`SLA missed: <b>${inc.title}</b>. On-call took over. −150`);beep(160,.4);S.log.push('MISSED: '+inc.title+' (on-call)');S.lessons.push(`Missed the SLA on "${inc.title}". Next step was: ${inc.stages[inc.si].hint}`)}
+  if(ok&&inc.cleanup&&inc.kind!=='abend')inc.cleanup();
+  drawDash();updateHud();
+}
+function shiftTick(dt){
+  if(S.over)return;
+  const m=!$('#nb').hidden?0:dlg?C.dlgSpeed:1;
+  S.elapsed+=dt*m;S.spawnIn-=dt*m;
+  if(S.spawned<C.count&&S.active.length<C.maxActive&&S.spawnIn<=0){spawn();S.spawnIn=C.gap+Math.random()*4}
+  if(S.spawned<C.count&&S.active.length===0&&S.spawnIn>3)S.spawnIn=3;
+  S.active.slice().forEach(inc=>{if(inc.busy)return;inc.t-=dt*m;if(inc.t<=0)resolve(inc,false)});
+  mins=Math.min(359,60+Math.floor(S.elapsed/2));
+  if(S.spawned>=C.count&&!S.active.length&&!S.endReady){S.endReady=true;radio("That's the last of it. Write up the turnover on the board by the dashboard, then you can clock out.")}
+}
+let hudT=0;
+function updateHud(){
+  if(mode!=='shift'||!S)return;
+  $('#objHead').textContent=`SHIFT ${career.shifts+1} · LEVEL ${C.L} · ${S.score} PTS`;
+  const urgent=S.active.slice().sort((a,b)=>a.t-b.t);
+  let h=urgent.map(i=>{const st=i.stages[i.si];const c=i.t<20?'r':i.t<45?'y':'g';
+    return `<div class="incl"><b class="${c}">${fmtT(i.t)}</b> ${i.title}<br><span>${st.pt.verb}</span></div>`}).join('');
+  if(!h)h=S.endReady?'<div class="incl">Write the turnover at the board</div>':'<div class="incl">All green. Watch for the next alert…</div>';
+  $('#obj').innerHTML=h;
+  urgent.forEach(i=>{const t=TILES.find(x=>x[0]===i.tile);if(t)t[2]=i.label+' '+fmtT(i.t)});
+  $('#clock').textContent=clockStr();drawDash();
+}
+function shiftPoints(){
+  const out=[];
+  S.active.forEach(inc=>{if(inc.busy)return;const st=inc.stages[inc.si];out.push({T:st.pt,inc,run:()=>{inc.busy=true;st.run(inc,()=>stageNext(inc))}})});
+  out.sort((a,b)=>a.inc.t-b.inc.t);
+  if(S.endReady&&!S.over)out.push({T:pt('board','Write turnover'),run:writeTurnover});
+  out.push({T:TARGETS.rosa,noBeacon:true,run:askRosa,verb:C.hintCost?`Ask Rosa (−${C.hintCost})`:'Ask Rosa for a hint'});
+  return out;
+}
+function askRosa(){
+  const u=S.active.filter(i=>!i.busy).sort((a,b)=>a.t-b.t)[0];
+  if(!u){talk([{who:'Rosa',text:S.endReady?'All done. Write the turnover on the board by the dashboard.':'Everything\'s green. Keep an eye on the dashboard, and come back if you get stuck.'}]);return}
+  S.score-=C.hintCost;S.hints++;
+  talk([{who:'Rosa',text:`Most urgent is ${u.title}. ${u.stages[u.si].hint}`}]);updateHud();
+}
+function writeTurnover(){
+  const good=S.log.length?S.log:['Quiet night'];
+  const right=good.slice(0,4).join('; ')+(good.length>4?'; ...':'');
+  const opts=shuf([{t:right,ok:true,why:'Exactly. Everything that broke, what you did, and anything still open.'},
+    {t:'All good, nothing to report.',why:'The next shift needs the history. Things broke tonight.'},
+    {t:'Busy night. Fixed some stuff.',why:'Too vague for anyone to act on.'}]);
+  talk([{who:'Turnover board',text:'Which turnover note is right for tonight?',choices:opts},{act:()=>{
+    const g=tob.g;g.fillStyle='#e9eef2';g.fillRect(0,0,512,340);g.fillStyle='#1d2733';g.font='700 34px "Chakra Petch", sans-serif';g.fillText('SHIFT TURNOVER',24,48);
+    g.font='18px "IBM Plex Mono", monospace';g.fillStyle='#3a4757';good.slice(0,7).forEach((l,i)=>g.fillText(l.slice(0,40),24,90+i*32));tob.tex.needsUpdate=true}}],()=>endShift(),{wrongs:0,isTurnover:true});
+}
+function endShift(){
+  S.over=true;try{localStorage.removeItem(SHIFT_KEY)}catch(e){}
+  const tot=S.right+S.wrong,acc=tot?S.right/tot:1;
+  const stars=acc>=.9&&S.misses===0?3:acc>=.75&&S.misses<=1?2:acc>=.6&&S.misses<=Math.floor(C.count/3)?1:0;
+  const pass=stars>0,score=Math.max(0,S.score),oldL=career.level;
+  career.shifts++;career.xp+=score;career.best[C.L]=Math.max(career.best[C.L]||0,score);
+  if(pass)career.level++;
+  saveCareer();
+  $('#rpEyebrow').textContent=`Shift ${career.shifts} · Level ${oldL} · ${rankFor(oldL)}`;
+  $('#rpTitle').textContent=pass?(stars===3?'Flawless shift.':'Shift complete.'):'Rough night.';
+  $('#rpStars').innerHTML=[0,1,2].map(i=>`<span class="${i<stars?'on':''}">★</span>`).join('');
+  $('#rpStats').innerHTML=`<div><b>${score}</b>points</div><div><b>${Math.round(acc*100)}%</b>first-try</div><div><b>${S.misses}</b>SLAs missed</div><div><b>${S.hints}</b>hints</div>`;
+  $('#rpRank').innerHTML=pass?`<div class="rankup"><span class="eyebrow">Promoted</span><b>Level ${career.level} · ${rankFor(career.level)}</b><span>${levelPreview(career.level)}</span></div>`
+    :`<div class="rankup fail"><span class="eyebrow">Not promoted yet</span><span>Pass with at least 60% first-try answers and few missed SLAs. Replay level ${oldL} to move up.</span></div>`;
+  const les=[...new Set(S.lessons)].slice(0,4);
+  $('#rpLessons').innerHTML=les.length?'<div class="eyebrow">Review these</div>'+les.map(l=>`<p>${l.replace(/\[\[(\w+)\]\]/g,(m,k)=>TERMS[k]?TERMS[k][0]:k)}</p>`).join(''):'<p>No mistakes to review. Nice work.</p>';
+  $('#rpNext').textContent=pass?`Start shift ${career.shifts+1}`:`Retry level ${oldL}`;
+  $('#report').hidden=false;
+}
+function levelPreview(L){
+  const c=cfg(L),p=cfg(L-1),adds=[];
+  if(c.kinds.length>p.kinds.length)adds.push('new incident types: '+c.kinds.filter(k=>!p.kinds.includes(k)).map(k=>({abend:'abends',order:'job releases',recon:'reconciliation',late:'SLA risks'}[k])).join(', '));
+  if(c.codes.length>p.codes.length)adds.push('new abend codes: '+c.codes.filter(k=>!p.codes.includes(k)).join(', '));
+  if(c.maxActive>p.maxActive)adds.push(`up to ${c.maxActive} incidents at once`);
+  if(c.dlgSpeed>p.dlgSpeed)adds.push(p.dlgSpeed===0?'timers keep running while you talk':'timers run faster while you talk');
+  if(!c.arrow&&p.arrow)adds.push('no floor arrow, only markers');
+  adds.push(`${c.count} incidents, shorter timers`);
+  return 'Next shift: '+adds.join(' · ')+'.';
+}
+const SHIFT_KEY='nightShiftShift_v1';
+function saveShift(){
+  if(mode!=='shift'||!S||S.over||!started)return;
+  try{localStorage.setItem(SHIFT_KEY,JSON.stringify({level:C.L,shiftNo:career.shifts+1,score:S.score,right:S.right,wrong:S.wrong,misses:S.misses,hints:S.hints,spawned:S.spawned,elapsed:S.elapsed,log:S.log,lessons:S.lessons,endReady:S.endReady,intro:S.intro,
+    active:S.active.map(a=>({kind:a.kind,t:a.t})),x:player.position.x,z:player.position.z}))}catch(e){}
+}
+function loadShift(){try{const v=JSON.parse(localStorage.getItem(SHIFT_KEY)||'null');return v&&v.level===career.level?v:null}catch(e){return null}}
+function relaunch(target){try{sessionStorage.setItem('ns_auto',target)}catch(e){}location.reload()}
+
+/* ================= INPUT ================= */
+const keys={};
+let started=false;
+addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase();keys[k]=true;
+  if(!started)return;
+  if(['e',' ','enter'].includes(k)){e.preventDefault();if(dlg)advance();else interact()}
+  if(k==='n'&&!dlg){toggleNb()}
+});
+addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false});
+const joy={x:0,y:0,id:null};
+const jEl=$('#joy'),knob=$('#knob');
+function joyMove(e){const r=jEl.getBoundingClientRect();let dx=e.clientX-(r.left+r.width/2),dy=e.clientY-(r.top+r.height/2);const d=Math.hypot(dx,dy),max=44;if(d>max){dx=dx/d*max;dy=dy/d*max}joy.x=dx/max;joy.y=dy/max;knob.style.transform=`translate(${dx}px,${dy}px)`}
+jEl.addEventListener('pointerdown',e=>{joy.id=e.pointerId;jEl.setPointerCapture(e.pointerId);joyMove(e)});
+jEl.addEventListener('pointermove',e=>{if(e.pointerId===joy.id)joyMove(e)});
+const joyEnd=e=>{if(e.pointerId!==joy.id)return;joy.id=null;joy.x=joy.y=0;knob.style.transform=''};
+jEl.addEventListener('pointerup',joyEnd);jEl.addEventListener('pointercancel',joyEnd);
+$('#act').addEventListener('click',()=>interact());
+function toggleNb(){const nb=$('#nb');if(nb.hidden){termList($('#nbList'));nb.hidden=false}else nb.hidden=true}
+$('#nbBtn').onclick=toggleNb;$('#nbClose').onclick=toggleNb;
+function initAudio(){try{actx=new (window.AudioContext||window.webkitAudioContext)()}catch(e){}}
+const saved=loadSave();shifts=(saved&&saved.shifts)||0;
+const tutSaved=saved&&saved.qid&&Q[saved.qid]&&saved.qid!=='intro';
+if(career.tutorialDone){
+  $('#menuInfo').innerHTML=`<b style="color:var(--accent);font-family:var(--f-display);font-size:20px">Level ${career.level} · ${rankFor(career.level)}</b><br>${career.shifts} real shift${career.shifts===1?'':'s'} worked · ${career.xp.toLocaleString()} XP · ${learned.length} words learned`;
+  $('#menuInfo').hidden=false;$('#shiftBtn').hidden=false;$('#shiftBtn').textContent=`Start shift ${career.shifts+1}`;
+  $('#startBtn').textContent='Replay the tutorial';$('#startBtn').classList.add('ghost');
+  if(tutSaved){$('#contBtn').hidden=false;$('#contBtn').textContent='Continue tutorial';$('#contBtn').classList.add('ghost')}
+  $('#againBtn').textContent='Back to real shifts';
+}else if(tutSaved){
+  const g=Q[saved.qid].goal;
+  $('#saveInfo').innerHTML=`<b style="color:var(--fg)">Saved tutorial:</b> ${typeof g==='function'?'Loading jobs on the Batch Line':g} · ${(saved.learned||[]).length} words learned`;
+  $('#saveInfo').hidden=false;$('#contBtn').hidden=false;
+  $('#startBtn').textContent='Start the tutorial over';$('#startBtn').classList.add('ghost');
+}
+$('#contBtn').onclick=()=>{initAudio();mode='tutorial';started=true;$('#saveBtn').hidden=false;$('#title').hidden=true;restore(saved);beep(660,.08)};
+$('#startBtn').onclick=()=>{initAudio();mode='tutorial';started=true;$('#saveBtn').hidden=false;$('#title').hidden=true;go('intro');beep(660,.08)};
+$('#shiftBtn').onclick=()=>{initAudio();try{localStorage.removeItem(SHIFT_KEY)}catch(e){}$('#title').hidden=true;startShift();beep(660,.08)};
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&$('#end').hidden){save();saveShift()}});
+$('#saveBtn').onclick=()=>{
+  if(mode==='tutorial')save();else saveShift();saveCareer();
+  const b=$('#saveBtn');b.textContent='Saved ✓';b.classList.add('done');beep(990,.08);
+  toast('Progress saved. You can close the game and pick up here anytime.');
+  setTimeout(()=>{b.textContent='Save';b.classList.remove('done')},1800);
+};
+const shiftSaved=career.tutorialDone?loadShift():null;
+if(shiftSaved){
+  $('#shiftContBtn').hidden=false;$('#shiftContBtn').textContent=`Continue shift ${shiftSaved.shiftNo}`;
+  $('#shiftBtn').textContent='Start a fresh shift';$('#shiftBtn').classList.add('ghost');
+  $('#menuInfo').innerHTML+=`<br><b style="color:var(--fg)">Saved mid-shift:</b> ${Math.max(0,shiftSaved.score)} pts, ${shiftSaved.spawned} incidents in`;
+}
+$('#shiftContBtn').onclick=()=>{initAudio();$('#title').hidden=true;startShift(shiftSaved);beep(660,.08)};
+$('#againBtn').onclick=()=>relaunch('shift');
+$('#endMenuBtn').onclick=()=>relaunch('menu');
+$('#rpNext').onclick=()=>relaunch('shift');
+$('#rpMenu').onclick=()=>relaunch('menu');
+let auto=null;try{auto=sessionStorage.getItem('ns_auto');sessionStorage.removeItem('ns_auto')}catch(e){}
+if(auto==='shift'&&career.tutorialDone){$('#title').hidden=true;startShift()}
+
+function curTarget(){const t=Q[qid].t;return t?TARGETS[t]:null}
+const overlaysOpen=()=>!$('#nb').hidden||!$('#end').hidden||!$('#report').hidden;
+function activePoints(){
+  if(mode==='shift')return S?shiftPoints():[];
+  const T=curTarget();return T&&Q[qid].run?[{T,run:()=>Q[qid].run()}]:[];
+}
+function nearestPoint(pts){let best=null,bd=1e9;pts.forEach(P=>{const d=Math.hypot(player.position.x-P.T.p[0],player.position.z-P.T.p[1]);if(d<P.T.r&&d<bd){bd=d;best=P}});return best}
+function interact(){if(dlg||!started||overlaysOpen())return;const P=nearestPoint(activePoints());if(P)P.run()}
+
+/* ================= LOOP ================= */
+function blocked(x,z){const r=0.42;for(const s of solids){if(x+r>s.x0&&x-r<s.x1&&z+r>s.z0&&z-r<s.z1)return true}return false}
+const clk=new THREE.Clock();let tAll=0;
+drawDash();
+camera.position.copy(player.position).add(camOff);camera.lookAt(player.position.x,1,player.position.z);
+function loop(){
+  requestAnimationFrame(loop);
+  const dt=Math.min(clk.getDelta(),0.05);tAll+=dt;
+  // movement
+  let mx=0,mz=0;
+  const free=started&&!dlg&&!overlaysOpen();
+  if(mode==='shift'&&started&&S){shiftTick(dt);hudT+=dt;if(hudT>.25){hudT=0;updateHud()}}
+  if(!dlg&&pendingRadio.length&&started&&!overlaysOpen())talk(pendingRadio.shift());
+  if(free){
+    if(keys['w']||keys['arrowup'])mz-=1;if(keys['s']||keys['arrowdown'])mz+=1;
+    if(keys['a']||keys['arrowleft'])mx-=1;if(keys['d']||keys['arrowright'])mx+=1;
+    mx+=joy.x;mz+=joy.y;
+  }
+  const len=Math.hypot(mx,mz);let moving=false;
+  if(len>0.12){
+    const sp=7*Math.min(1,len);mx/=len;mz/=len;
+    const nx=player.position.x+mx*sp*dt,nz=player.position.z+mz*sp*dt;
+    if(!blocked(nx,player.position.z))player.position.x=nx;
+    if(!blocked(player.position.x,nz))player.position.z=nz;
+    const want=Math.atan2(mx,mz);let d=want-player.rotation.y;d=Math.atan2(Math.sin(d),Math.cos(d));player.rotation.y+=d*Math.min(1,dt*14);
+    moving=true;
+  }
+  animChar(player,moving,dt);
+  // npcs face player when close, idle bob
+  [rosa,marcus].forEach((n,i)=>{const dx=player.position.x-n.position.x,dz=player.position.z-n.position.z;
+    if(Math.hypot(dx,dz)<7){let d=Math.atan2(dx,dz)-n.rotation.y;d=Math.atan2(Math.sin(d),Math.cos(d));n.rotation.y+=d*Math.min(1,dt*5)}
+    n.userData.armR.rotation.x=Math.sin(tAll*1.5+i)*0.08;});
+  // carried
+  if(carried){carried.position.set(player.position.x,3.25,player.position.z);carried.rotation.y=player.rotation.y}
+  // tweens
+  for(let i=tweens.length-1;i>=0;i--){const t=tweens[i];t.t+=dt;const k=Math.min(1,t.t/t.dur);t.obj.position.lerpVectors(t.from,t.to,k*k);if(k>=1){tweens.splice(i,1);t.done&&t.done()}}
+  // belt
+  belt.forEach(b=>{if(b.crate.position.x<b.target){b.crate.position.x=Math.min(b.target,b.crate.position.x+2.4*dt)}else if(!b.done){b.done=true;b.onArrive&&b.onArrive()}});
+  // smoke
+  if(smoking&&Math.random()<dt*6)puff(16);
+  if(mode==='shift')smokeXs.forEach(x=>{if(Math.random()<dt*6)puff(x)});
+  for(let i=smoke.length-1;i>=0;i--){const s=smoke[i];s.life-=dt;s.p.position.y+=dt*1.2;s.p.material.opacity=Math.max(0,s.life/1.4*.8);if(s.life<=0){scene.remove(s.p);smoke.splice(i,1)}}
+  // rack blink
+  rackOn.forEach(r=>{const on=Math.sin(tAll*10)>0;r.leds.forEach((l,i)=>l.material.color.set((on^(i%2))?0xf04848:0x40161a))});
+  if(rackAlarm){const on=Math.sin(tAll*10)>0;redRack.leds.forEach((l,i)=>l.material.color.set((on^(i%2))?0xf04848:0x40161a))}
+  // leds flicker
+  if(Math.random()<dt*8){const r=racks[Math.floor(Math.random()*racks.length)];if((r!==redRack||!rackAlarm)&&!rackOn.has(r)){const l=r.leds[Math.floor(Math.random()*4)];l.material.color.set(Math.random()<.5?0x3bd47a:0x1f7a46)}}
+  // beacons + arrow + action button
+  const pts=started&&!overlaysOpen()?activePoints():[];
+  const bpts=pts.filter(P=>!P.noBeacon);
+  beacons.forEach((B,i)=>{const P=bpts[i];B.b.visible=B.ring.visible=!!P&&!dlg;if(!P)return;
+    const T=P.T,bp=T.bp||T.p,col=P.inc?({bad:0xf06060,warn:0xffd34d,run:0x5aa9f0,idle:0xb9c6d3}[P.inc.status]||0xffd34d):0xffd34d;
+    B.b.material.color.set(col);B.ring.material.color.set(col);
+    B.b.position.set(bp[0],T.h+Math.sin(tAll*3+i)*0.18,bp[1]);B.b.rotation.y+=dt*2;B.ring.position.set(T.p[0],0.04+i*0.002,T.p[1]);B.ring.material.opacity=.45+Math.sin(tAll*4)*.25});
+  const AT=bpts[0]&&(mode==='tutorial'||(C&&C.arrow))?bpts[0].T:null;
+  if(AT){const dx=AT.p[0]-player.position.x,dz=AT.p[1]-player.position.z,dist=Math.hypot(dx,dz)||1;
+    arrow.visible=dist>4&&!dlg;arrow.position.set(player.position.x+dx/dist*1.7,0.12,player.position.z+dz/dist*1.7);arrow.rotation.y=Math.atan2(dx,dz)}else arrow.visible=false;
+  const NP=free?nearestPoint(pts):null;
+  const act=$('#act');if(NP){act.hidden=false;const v=NP.verb||NP.T.verb;if($('#actTxt').textContent!==v)$('#actTxt').textContent=v}else act.hidden=true;
+  if(started&&$('#end').hidden&&(tAll%3)<dt){save();saveShift()}
+  // camera
+  const want=new THREE.Vector3().copy(player.position).add(camOff);
+  camera.position.lerp(want,Math.min(1,dt*5));camera.lookAt(camera.position.x-camOff.x,1,camera.position.z-camOff.z);
+  renderer.render(scene,camera);
+}
+loop();
+// redraw text textures once fonts load
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(()=>{drawDash();drawTurnover(turnoverDone)});
+})();
+</script>
+
+<script>
+if('serviceWorker' in navigator){addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}))}
+</script>
+</body>
+</html>
