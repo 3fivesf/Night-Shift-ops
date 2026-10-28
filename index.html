@@ -111,7 +111,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 <div class="hud" id="objWrap"><div class="obj"><small id="objHead">OBJECTIVE</small><span id="obj">Press Start</span></div></div>
 <div class="hud" id="topRight">
   <button class="nbBtn" id="nbBtn">Notebook<b id="nbCount">0</b></button>
-  <button class="nbBtn saveBtn" id="saveBtn" hidden>Save</button>
+  <div id="saveRow" hidden style="display:flex;gap:6px"><button class="nbBtn" id="gLoadBtn">Load</button><button class="nbBtn saveBtn" id="saveBtn">Save</button></div>
   <div class="clock" id="clock">01:30 AM</div>
 </div>
 <div class="hud" id="joy"><div id="knob"></div></div>
@@ -133,6 +133,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     </div>
     <p id="menuInfo" hidden></p>
     <p id="saveInfo" hidden></p>
+    <button class="btn ghost" id="loadBtn" hidden>Load saved game</button>
     <button class="btn" id="shiftContBtn" hidden>Continue shift</button>
     <button class="btn" id="shiftBtn" hidden>Start shift</button>
     <button class="btn" id="contBtn" hidden>Continue shift</button>
@@ -618,7 +619,8 @@ function go(id){qid=id;const g=Q[id].goal;$('#obj').textContent=typeof g==='func
 /* ================= SAVE ================= */
 const SAVE_KEY='nightShiftSave_v1';
 let shifts=0;
-function save(){if(!started||mode!=='tutorial')return;try{localStorage.setItem(SAVE_KEY,JSON.stringify({qid,jobsLoaded,learned,mins,x:player.position.x,z:player.position.z,shifts}))}catch(e){}}
+let loadingSlot=false;
+function save(){if(loadingSlot||!started||mode!=='tutorial')return;try{localStorage.setItem(SAVE_KEY,JSON.stringify({qid,jobsLoaded,learned,mins,x:player.position.x,z:player.position.z,shifts}))}catch(e){}}
 function loadSave(){try{return JSON.parse(localStorage.getItem(SAVE_KEY)||'null')}catch(e){return null}}
 const ORDER=Object.keys(Q);
 function restore(s){
@@ -869,7 +871,7 @@ function startShift(sv){
   TILES.length=0;['CLAIMS_LOAD','PAY_CALC','BILL_CYCLE','ELIG_SYNC','REMIT_835','GL_POST','PROV_FEED','BATCHAPP01'].forEach((n,i)=>TILES.push([n,i%3===0?'idle':'ok',i%3===0?'SCHEDULED':'OK']));
   drawTurnover(false);mins=60;$('#clock').textContent=clockStr();drawDash();
   player.position.set(0,0,9.5);
-  started=true;$('#saveBtn').hidden=false;
+  started=true;$('#saveRow').hidden=false;
   if(sv){
     ['score','right','wrong','misses','hints','spawned','elapsed','log','lessons','endReady','intro'].forEach(k=>{if(sv[k]!==undefined)S[k]=sv[k]});
     (sv.active||[]).forEach(a=>{const inc={id:++S.ids,kind:a.kind,si:0,busy:false,wrongs:0};MAKE[a.kind](inc);inc.sla=Math.round(C.sla*KMULT[a.kind]);inc.t=Math.max(20,a.t);S.active.push(inc);setTileFor(inc)});
@@ -981,7 +983,7 @@ function levelPreview(L){
 }
 const SHIFT_KEY='nightShiftShift_v1';
 function saveShift(){
-  if(mode!=='shift'||!S||S.over||!started)return;
+  if(loadingSlot||mode!=='shift'||!S||S.over||!started)return;
   try{localStorage.setItem(SHIFT_KEY,JSON.stringify({level:C.L,shiftNo:career.shifts+1,score:S.score,right:S.right,wrong:S.wrong,misses:S.misses,hints:S.hints,spawned:S.spawned,elapsed:S.elapsed,log:S.log,lessons:S.lessons,endReady:S.endReady,intro:S.intro,
     active:S.active.map(a=>({kind:a.kind,t:a.t})),x:player.position.x,z:player.position.z}))}catch(e){}
 }
@@ -1023,12 +1025,31 @@ if(career.tutorialDone){
   $('#saveInfo').hidden=false;$('#contBtn').hidden=false;
   $('#startBtn').textContent='Start the tutorial over';$('#startBtn').classList.add('ghost');
 }
-$('#contBtn').onclick=()=>{initAudio();mode='tutorial';started=true;$('#saveBtn').hidden=false;$('#title').hidden=true;restore(saved);beep(660,.08)};
-$('#startBtn').onclick=()=>{initAudio();mode='tutorial';started=true;$('#saveBtn').hidden=false;$('#title').hidden=true;go('intro');beep(660,.08)};
+$('#contBtn').onclick=()=>{initAudio();mode='tutorial';started=true;$('#saveRow').hidden=false;$('#title').hidden=true;restore(saved);beep(660,.08)};
+$('#startBtn').onclick=()=>{initAudio();mode='tutorial';started=true;$('#saveRow').hidden=false;$('#title').hidden=true;go('intro');beep(660,.08)};
 $('#shiftBtn').onclick=()=>{initAudio();try{localStorage.removeItem(SHIFT_KEY)}catch(e){}$('#title').hidden=true;startShift();beep(660,.08)};
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&$('#end').hidden){save();saveShift()}});
+const SLOT_KEY='nightShiftSlot_v1';
+const lsGet=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
+function loadSlot(){try{return JSON.parse(lsGet(SLOT_KEY)||'null')}catch(e){return null}}
+function writeSlot(){try{localStorage.setItem(SLOT_KEY,JSON.stringify({at:Date.now(),mode,career:lsGet(CAREER_KEY),tut:lsGet(SAVE_KEY),shift:mode==='shift'?lsGet(SHIFT_KEY):null}))}catch(e){}}
+function applySlot(){
+  const sl=loadSlot();if(!sl)return false;
+  loadingSlot=true;
+  try{const put=(k,v)=>v?localStorage.setItem(k,v):localStorage.removeItem(k);put(CAREER_KEY,sl.career);put(SAVE_KEY,sl.tut);put(SHIFT_KEY,sl.shift)}catch(e){return false}
+  relaunch('load');return true;
+}
+function slotWhen(sl){const d=new Date(sl.at);return d.toLocaleDateString(undefined,{month:'short',day:'numeric'})+', '+d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})}
+let loadArm=null;
+$('#gLoadBtn').onclick=()=>{
+  const sl=loadSlot(),b=$('#gLoadBtn');
+  if(!sl){toast('No save yet. Tap <b>Save</b> first.');return}
+  if(!loadArm){b.textContent='Tap to confirm';b.classList.add('saveBtn');toast(`Load your save from <b>${slotWhen(sl)}</b>? Progress since then is lost.`);
+    loadArm=setTimeout(()=>{loadArm=null;b.textContent='Load';b.classList.remove('saveBtn')},3500);return}
+  clearTimeout(loadArm);loadArm=null;applySlot();
+};
 $('#saveBtn').onclick=()=>{
-  if(mode==='tutorial')save();else saveShift();saveCareer();
+  if(mode==='tutorial')save();else saveShift();saveCareer();writeSlot();
   const b=$('#saveBtn');b.textContent='Saved ✓';b.classList.add('done');beep(990,.08);
   toast('Progress saved. You can close the game and pick up here anytime.');
   setTimeout(()=>{b.textContent='Save';b.classList.remove('done')},1800);
@@ -1044,7 +1065,15 @@ $('#againBtn').onclick=()=>relaunch('shift');
 $('#endMenuBtn').onclick=()=>relaunch('menu');
 $('#rpNext').onclick=()=>relaunch('shift');
 $('#rpMenu').onclick=()=>relaunch('menu');
+const slot=loadSlot();
+if(slot){$('#loadBtn').hidden=false;$('#loadBtn').innerHTML=`Load saved game <span style="font-family:var(--f-body);font-weight:400;font-size:13px;opacity:.75">· ${slotWhen(slot)}</span>`}
+$('#loadBtn').onclick=()=>{initAudio();applySlot()};
 let auto=null;try{auto=sessionStorage.getItem('ns_auto');sessionStorage.removeItem('ns_auto')}catch(e){}
+if(auto==='load'&&slot){
+  if(slot.mode==='shift'&&shiftSaved){$('#title').hidden=true;initAudio();startShift(shiftSaved);setTimeout(()=>toast('Save loaded.'),300)}
+  else if(tutSaved){$('#title').hidden=true;initAudio();mode='tutorial';started=true;$('#saveRow').hidden=false;restore(saved);setTimeout(()=>toast('Save loaded.'),300)}
+  else toast('Save loaded. Pick up from the menu.');
+}
 if(auto==='shift'&&career.tutorialDone){$('#title').hidden=true;startShift()}
 
 function curTarget(){const t=Q[qid].t;return t?TARGETS[t]:null}

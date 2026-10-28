@@ -1,5 +1,5 @@
 // Night Shift Ops offline cache. Bump VERSION when you upload a new index.html.
-const VERSION='night-shift-v3';
+const VERSION='night-shift-v4';
 const CORE=['./','./index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png','./apple-touch-icon.png',
   'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'];
 self.addEventListener('install',e=>{
